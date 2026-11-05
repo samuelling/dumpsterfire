@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dumpster Fire Test Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: lab-notebook column — verdict first, live bench, validation figures, then the tuning list. */
+:root {
+  color-scheme: light;
+  --bg: #f4f4f1;          /* page plane: galvanised-steel grey */
+  --panel: #fcfcfb;       /* chart surface */
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --line: #e1e0d9;
+  --axis: #c3c2b7;
+  --accent: #2f5d3a;      /* dumpster green */
+  --accent-ink: #ffffff;
+  --good: #0ca30c; --good-ink: #006300;
+  --warn: #fab219; --warn-ink: #7a5200;
+  --bad: #d03b3b; --bad-ink: #a12424;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --ref: #0b0b0b;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f100f; --panel: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --line: #2c2c2a; --axis: #383835; --accent: #6fae7f; --accent-ink: #0b0b0b;
+    --good-ink: #0ca30c; --warn-ink: #fab219; --bad-ink: #e66767;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --ref: #f0efec;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f100f; --panel: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --line: #2c2c2a; --axis: #383835; --accent: #6fae7f; --accent-ink: #0b0b0b;
+  --good-ink: #0ca30c; --warn-ink: #fab219; --bad-ink: #e66767;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --ref: #f0efec;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
+main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 64px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: 0.01em; text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: 44px; }
+h2 { font-size: 28px; }
+h3 { font-size: 19px; font-family: var(--font-body); font-weight: 600; letter-spacing: 0; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--ink-2); font-size: 16px; }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+header { display: grid; gap: 10px; border-bottom: 3px solid var(--accent); padding-bottom: 18px; }
+.kicker { font-family: var(--font-mono); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+section { display: grid; gap: 14px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+
+/* verdict summary */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 4px; border-left: 5px solid var(--muted); }
+.tile.good { border-left-color: var(--good); } .tile.warn { border-left-color: var(--warn); } .tile.bad { border-left-color: var(--bad); }
+.tile .big { font-family: var(--font-display); font-size: 30px; line-height: 1; }
+.tile .sub { color: var(--ink-2); font-size: 13px; }
+
+/* scorecard */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12.5px; white-space: nowrap; }
+td.mat { white-space: nowrap; font-weight: 600; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; margin: 1px 0; }
+.chip b { font-weight: 500; color: var(--ink-2); font-family: var(--font-body); font-size: 11.5px; }
+.chip.good { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.chip.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+.chip.bad  { color: var(--bad-ink);  border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
+.chip.none { color: var(--muted); }
+.legend-row { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink-2); align-items: center; }
+
+/* bench */
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end; }
+.ctl { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.ctl output { font-family: var(--font-mono); color: var(--ink); }
+select, input[type="range"], button { font: inherit; }
+select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--axis); background: var(--panel); color: var(--ink); min-width: 220px; }
+input[type="range"] { width: 200px; accent-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); color: var(--ink); padding: 6px 11px; cursor: pointer; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.readout { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--ink-2); }
+.readout span b { font-family: var(--font-mono); color: var(--ink); font-weight: 500; }
+.status { font-size: 12.5px; color: var(--muted); min-height: 1.2em; }
+.chart { width: 100%; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.chart-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--axis); border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); white-space: nowrap; display: none; z-index: 5; }
+.tip .num { color: var(--ink); }
+svg text { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+svg .lbl { fill: var(--ink-2); font-size: 11.5px; }
+
+/* findings */
+ol.tune { margin: 0; padding-left: 22px; display: grid; gap: 12px; max-width: 80ch; }
+ol.tune li::marker { font-family: var(--font-display); font-size: 18px; color: var(--accent); }
+ol.tune strong { display: block; }
+.pill { display: inline-block; font-size: 11.5px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; vertical-align: 1px; font-weight: 500; }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 80ch; }
+.sources { font-size: 13px; color: var(--ink-2); }
+.sources a { color: var(--accent); }
+details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+@media (max-width: 520px) { h1 { font-size: 34px; } select { min-width: 0; width: 100%; } input[type="range"] { width: 100%; } .ctl { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="kicker">Shred Hole companion · solid-phase physics check · <span id="runDate"></span></div>
+  <h1>Dumpster Fire Test Bench</h1>
+  <p class="lede">Before any flames get rendered: a 1‑D pyrolysis and ignition model for four materials, heated like a cone calorimeter sample and scored against published lab data. I calibrated it on the 25 and 50 kW/m² tests only. The 75 kW/m² tests and another lab's data are held out to check it.</p>
+</header>
+
+<section aria-labelledby="h-verdict">
+  <h2 id="h-verdict">Verdict</h2>
+  <div class="tiles" id="tiles"></div>
+  <div class="panel tablewrap">
+    <table id="score">
+      <thead><tr><th>Material</th><th>25 kW/m² · fit</th><th>50 kW/m² · fit</th><th>75 kW/m² · held out</th><th>Other lab · held out</th><th>Lowest flux that ignites</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="legend-row" style="margin-top:10px">
+      <span>Each chip is simulated ÷ measured.</span>
+      <span class="chip good">✓ within 25%</span><span class="chip warn">! within 50%</span><span class="chip bad">✕ further off</span>
+      <span><b>ig</b> = time to sustained ignition, <b>pk</b> = peak heat release rate</span>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="h-bench">
+  <h2 id="h-bench">Live bench</h2>
+  <p>This runs the same model in your browser. Pick a material and a radiant heat flux. Dashed lines are the untuned physics defaults. The black band and bar show the measured ignition time and peak range, where a test exists at that flux.</p>
+  <div class="panel" style="display:grid; gap:14px">
+    <div class="controls">
+      <label class="ctl" for="mat">Material
+        <select id="mat"></select>
+      </label>
+      <label class="ctl" for="flux">Radiant heat flux <output id="fluxOut" for="flux"></output>
+        <input type="range" id="flux" min="10" max="80" step="1" value="50">
+      </label>
+      <label class="ctl" for="moist">Moisture (kg water / kg dry) <output id="moistOut" for="moist"></output>
+        <input type="range" id="moist" min="0" max="0.30" step="0.01" value="0.09">
+      </label>
+      <label class="ctl" for="thick">Thickness <output id="thickOut" for="thick"></output>
+        <input type="range" id="thick" min="0" max="1" step="0.001" value="0.5">
+      </label>
+      <div class="ctl">Model
+        <div class="seg" role="group" aria-label="Model parameters">
+          <button type="button" id="m-both" aria-pressed="true">Calibrated + defaults</button>
+          <button type="button" id="m-cal" aria-pressed="false">Calibrated only</button>
+        </div>
+      </div>
+      <label class="check" for="drip"><input type="checkbox" id="drip"> Molten surface drips off (vertical object)</label>
+    </div>
+    <div class="readout" id="readout"></div>
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="grid2">
+      <div><div class="chart-title">Heat release rate (kW/m²)</div><div class="chart" id="c-hrr"></div></div>
+      <div><div class="chart-title">Temperature (°C): exposed surface and back face</div><div class="chart" id="c-temp"></div></div>
+      <div><div class="chart-title">Mass remaining (% of initial)</div><div class="chart" id="c-mass"></div></div>
+      <div><div class="chart-title">Thickness and char depth (mm)</div><div class="chart" id="c-char"></div></div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="h-fig">
+  <h2 id="h-fig">Validation across heat flux</h2>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-title">Time to ignition vs heat flux (log–log)</div>
+      <div class="chart" id="c-tig"></div>
+      <p class="chart-note">Lines: calibrated model. Points: measured means, whiskers show the replicate range. Hollow points were not used in fitting. Thin materials (paper) follow a slope near −1 and thick ones (pine, PET) near −2, and each curve turns vertical at its critical heat flux.</p>
+    </div>
+    <div class="panel">
+      <div class="chart-title">Peak heat release rate vs heat flux (kW/m²)</div>
+      <div class="chart" id="c-pk"></div>
+      <p class="chart-note">Same encoding. Foam and PET peaks come from their melt pools, and both run hot at 75 kW/m².</p>
+    </div>
+  </div>
+  <details class="panel"><summary>Show these numbers as a table</summary><div class="tablewrap" style="margin-top:10px"><table id="tbl"></table></div></details>
+</section>
+
+<section aria-labelledby="h-mech">
+  <h2 id="h-mech">Mechanisms you'll want in the dumpster</h2>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-title">Wet wood: moisture delays ignition (pine, 35 kW/m²)</div>
+      <div class="chart" id="c-moist"></div>
+      <p class="chart-note">Water has to boil off before the surface can pass 100 °C. That plateau pushes ignition back, and a soaked pallet only steams for a while.</p>
+    </div>
+    <div class="panel">
+      <div class="chart-title">A PET bottle wall (0.3 mm), with and without dripping</div>
+      <div class="tablewrap"><table id="bottle"></table></div>
+      <p class="chart-note" style="margin-top:8px">Held flat in a pan, the thin wall ignites in seconds. Held vertical, the melt runs off before it can make enough fuel vapour, which is why bottles sag and drip in a fire instead of flaring. In the game, those drips should become a pool on the dumpster floor.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="h-tune">
+  <h2 id="h-tune">What needs tuning before the 3‑D layers</h2>
+  <ol class="tune" id="tune"></ol>
+  <h3>What already holds up</h3>
+  <ul class="plain" id="solid"></ul>
+</section>
+
+<section aria-labelledby="h-method">
+  <h2 id="h-method">Method</h2>
+  <ul class="plain">
+    <li>Each object face is a stack of thin layers. Conduction is implicit, with a radiating, convecting surface and an insulated back face, as with cone backing board. Water boils off at 100 °C, and PET melts at 250 °C, both by enthalpy clamp.</li>
+    <li>Arrhenius kinetics are pinned to each material's TGA peak temperature, and the gas leaves instantly. Wood leaves char in place, PU foam collapses into a liquid polyol pool, and PET leaves a small dispersed residue.</li>
+    <li>Ignition happens when fuel vapour flux holds above a critical value for a short delay. After that, the flame adds heat to the surface. HRR = vapour flux × effective heat of combustion, using FSRI's values.</li>
+    <li>Verification: on an inert semi-infinite solid with no losses, the surface temperature stays within <span class="num" id="verif"></span> of the analytic √t solution. Energy closes as well: total heat released equals each sample's fuel load.</li>
+    <li>Calibration used a bounded coordinate search on four knobs per material (critical vapour flux, flame heat flux, and two kinetic or heat-of-reaction terms), fit to the 25 and 50 kW/m² data only.</li>
+  </ul>
+  <div class="sources">
+    <strong>Sources</strong>
+    <ul class="plain" style="margin-top:6px">
+      <li><a href="https://materials.fsri.org/materialdetail/wood-stud">FSRI Materials &amp; Products Database: Wood Stud</a>, <a href="https://materials.fsri.org/materialdetail/overstuffed-chair-polyurethane-foam">Overstuffed Chair PU Foam</a>, <a href="https://materials.fsri.org/materialdetail/polyethylene-terephthalate-pet">PET</a>, <a href="https://materials.fsri.org/materialdetail/corrugated-cardboard">Corrugated Cardboard</a>, <a href="https://materials.fsri.org/materialdetail/pine-siding">Pine Siding</a></li>
+      <li><a href="https://nvlpubs.nist.gov/nistpubs/TechnicalNotes/NIST.TN.2043.pdf">NIST TN 2043: cone calorimetry of flexible PU foam at 35 kW/m²</a></li>
+      <li><a href="https://www.researchgate.net/figure/HEAT-RELEASE-RATE-HRR-CURVES-FOR-UNTREATED-AND-TREATED-SOUTHERN-PINE_fig1_266472400">White &amp; Dietenberger: southern pine at 50 kW/m²</a> · <a href="https://witpress.com/elibrary/wit-transactions-on-the-built-environment/110/20707">Timbers at 35 kW/m² (WIT Transactions)</a></li>
+      <li><a href="https://data.zhenzhi.com/details/1/888333853">Spearpoint &amp; Quintiere (2001): piloted ignition of wood, minimum flux ≈ 10 kW/m²</a></li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<script>
+// combustion.mjs — 1D solid-phase fire model for the dumpster-fire test bench
+// ---------------------------------------------------------------------------
+// One object (or one face of an object) = a stack of thin nodes, surface first.
+// Each node holds masses (kg/m²) of components (virgin solid, water, melt, char, …)
+// and a temperature. Per time step:
+//   1. implicit 1-D conduction, with a nonlinear radiating/convecting surface
+//   2. phase changes at fixed temperatures (water boils, PET melts) — enthalpy clamp
+//   3. Arrhenius pyrolysis reactions → fuel gas + char/liquid residues
+//   4. bookkeeping: foam-collapse liquid drains to a pool, molten surface can drip,
+//      empty nodes are merged, a thick surface node is split for resolution
+// Gas leaves instantly. Piloted ignition when fuel mass flux ≥ m''crit;
+// once flaming, the flame adds q''fl to the surface. HRR = m'' · ΔHc.
+// No game-engine dependencies: runs in Node and the browser.
+
+const SIGMA = 5.670374e-8;
+const RGAS = 8.314;
+const T_AMB = 293.15;
+const BETA_TGA = 10 / 60; // K/s — reference heating rate for quoting TGA peak temps
+
+// Arrhenius A from activation energy E and the TGA peak temperature Tp (K) at 10 K/min.
+// For a first-order reaction the peak of the rate satisfies E·β/(R·Tp²) = A·exp(−E/(R·Tp)).
+function arrheniusA(E, Tp, beta = BETA_TGA) {
+  return (E * beta) / (RGAS * Tp * Tp) * Math.exp(E / (RGAS * Tp));
+}
+
+function cpOf(c, T) { return c.cp + (c.cpSlope || 0) * (T - T_AMB); }
+function kOf(c, T) {
+  let k = c.k + (c.kSlope || 0) * (T - T_AMB) + (c.kRad || 0) * T * T * T;
+  if (c.kMax) k = Math.min(k, c.kMax);
+  return Math.max(k, 1e-3);
+}
+
+class Slab {
+  /**
+   * @param {object} mat     material definition (see materials.mjs)
+   * @param {object} opts    { thickness (m), back: 'insulated'|'exposed', drip: bool,
+   *                           moisture (override, kg water / kg dry solid), nodes }
+   */
+  constructor(mat, opts = {}) {
+    this.mat = mat;
+    this.comps = mat.components;
+    this.opts = Object.assign({ back: 'insulated', drip: false, h: 10 }, opts);
+    const L = opts.thickness ?? mat.thickness;
+    this.L0 = L;
+    // reactions: precompute A
+    this.reactions = (mat.reactions || []).map(r => ({ ...r, A: r.A ?? arrheniusA(r.E, r.Tp) }));
+    this.phase = mat.phase || [];
+    // initial composition per unit volume
+    const mc = opts.moisture ?? mat.moisture ?? 0;
+    const solid = mat.solid; // virgin component name
+    const rhoDry = this.comps[solid].rho;
+    // geometric grid, fine at the surface
+    const n = opts.nodes ?? 60;
+    const d0 = Math.min(L / n, 5e-5);
+    let g = 1.0;
+    if (L / n > d0) { // find growth factor so that sum = L
+      let lo = 1.0, hi = 2.0;
+      for (let it = 0; it < 80; it++) {
+        const mid = 0.5 * (lo + hi);
+        const s = d0 * (Math.pow(mid, n) - 1) / (mid - 1);
+        if (s > L) hi = mid; else lo = mid;
+      }
+      g = 0.5 * (lo + hi);
+    }
+    this.nodes = [];
+    let used = 0;
+    for (let i = 0; i < n; i++) {
+      let d = (g === 1.0) ? L / n : d0 * Math.pow(g, i);
+      if (i === n - 1) d = L - used;
+      used += d;
+      const m = {};
+      for (const k in this.comps) m[k] = 0;
+      m[solid] = rhoDry * d;
+      // water occupies pore space: count its mass, not its volume
+      m.water = (this.comps.water ? mc * rhoDry * d : 0);
+      this.nodes.push({ m, T: T_AMB, dPore: this.comps.water ? d : 0 });
+    }
+    this.t = 0;
+    this.flaming = false;
+    this.ignitedAt = null;
+    this.dripped = 0;
+    this.pooled = 0;
+    this.everIgnited = false;
+    this.m0 = this.totalMass();
+  }
+
+  // thickness of a node: volumes of solids/liquids; water lives in pores (no volume)
+  thick(nd) {
+    let v = 0;
+    for (const k in nd.m) { const c = this.comps[k]; if (c && !c.inPores) v += nd.m[k] / c.rho; }
+    return v;
+  }
+  heatCap(nd) {
+    let C = 0;
+    for (const k in nd.m) if (nd.m[k] > 0) C += nd.m[k] * cpOf(this.comps[k], nd.T);
+    return C;
+  }
+  cond(nd) {
+    let v = 0, kv = 0;
+    for (const k in nd.m) {
+      const c = this.comps[k]; if (!c || c.inPores || nd.m[k] <= 0) continue;
+      const vi = nd.m[k] / c.rho; v += vi; kv += vi * kOf(c, nd.T);
+    }
+    return v > 0 ? kv / v : 0.05;
+  }
+  surfProp(nd, key) { // volume-weighted surface radiative property
+    let v = 0, s = 0;
+    for (const k in nd.m) {
+      const c = this.comps[k]; if (!c || c.inPores || nd.m[k] <= 0) continue;
+      const vi = nd.m[k] / c.rho; v += vi; s += vi * (c[key] ?? 0.9);
+    }
+    return v > 0 ? s / v : 0.9;
+  }
+  totalMass() { let s = 0; for (const nd of this.nodes) for (const k in nd.m) s += nd.m[k]; return s + this.pooledMassInNodes(); }
+  pooledMassInNodes() { return 0; }
+  fuelLeft() {
+    let s = 0;
+    for (const nd of this.nodes) for (const k in nd.m) if (this.comps[k] && this.comps[k].fuel) s += nd.m[k];
+    return s;
+  }
+
+  // ---- one time step --------------------------------------------------------------
+  step(dt, qExt, Tamb = T_AMB) {
+    const N = this.nodes.length;
+    if (N === 0) return { mdot: 0, hrr: 0, Ts: Tamb };
+    const mat = this.mat;
+    const h = this.opts.h;
+    const qFl = this.flaming ? mat.ignition.qFlame : 0;
+
+    // conductances
+    const C = new Float64Array(N), G = new Float64Array(N), dd = new Float64Array(N), kk = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const nd = this.nodes[i];
+      C[i] = Math.max(this.heatCap(nd), 1e-6);
+      dd[i] = Math.max(this.thick(nd), 1e-9);
+      kk[i] = this.cond(nd);
+    }
+    for (let i = 0; i < N - 1; i++) G[i] = 1 / (dd[i] / (2 * kk[i]) + dd[i + 1] / (2 * kk[i + 1]));
+
+    // surface energy balance (zero-capacity surface between gas and node 0)
+    const top = this.nodes[0];
+    const alpha = this.surfProp(top, 'absorb');
+    const eps = this.surfProp(top, 'eps');
+    const Gs = 2 * kk[0] / dd[0];
+    const T0 = top.T;
+    let Ts = T0;
+    const qIn = alpha * qExt + qFl; // flame flux assumed fully absorbed
+    for (let it = 0; it < 30; it++) {
+      const f = qIn - eps * SIGMA * (Ts ** 4 - Tamb ** 4) - h * (Ts - Tamb) - Gs * (Ts - T0);
+      const df = -4 * eps * SIGMA * Ts ** 3 - h - Gs;
+      const dT = -f / df; Ts += dT;
+      if (Math.abs(dT) < 1e-6) break;
+    }
+    const hrTop = 4 * eps * SIGMA * Ts ** 3 + h;
+    const qStar = Gs * (Ts - T0);
+    const sTop = -Gs * hrTop / (Gs + hrTop);
+
+    // back boundary
+    let qBack = 0, sBack = 0;
+    if (this.opts.back === 'exposed') {
+      const nb = this.nodes[N - 1];
+      const epsb = this.surfProp(nb, 'eps');
+      const Tb = nb.T;
+      qBack = -(epsb * SIGMA * (Tb ** 4 - Tamb ** 4) + h * (Tb - Tamb));
+      sBack = -(4 * epsb * SIGMA * Tb ** 3 + h);
+    }
+
+    // tridiagonal: a_i T_{i-1} + b_i T_i + c_i T_{i+1} = r_i
+    const a = new Float64Array(N), b = new Float64Array(N), c = new Float64Array(N), r = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const Ti = this.nodes[i].T;
+      b[i] = C[i] / dt; r[i] = C[i] / dt * Ti;
+      if (i > 0) { a[i] = -G[i - 1]; b[i] += G[i - 1]; }
+      if (i < N - 1) { c[i] = -G[i]; b[i] += G[i]; }
+    }
+    // top: q = qStar + sTop (T0' − T0)
+    b[0] -= sTop; r[0] += qStar - sTop * T0;
+    // bottom
+    if (N === 1) { b[0] -= sBack; r[0] += qBack - sBack * this.nodes[0].T; }
+    else { b[N - 1] -= sBack; r[N - 1] += qBack - sBack * this.nodes[N - 1].T; }
+    // Thomas
+    for (let i = 1; i < N; i++) { const w = a[i] / b[i - 1]; b[i] -= w * c[i - 1]; r[i] -= w * r[i - 1]; }
+    const Tn = new Float64Array(N);
+    Tn[N - 1] = r[N - 1] / b[N - 1];
+    for (let i = N - 2; i >= 0; i--) Tn[i] = (r[i] - c[i] * Tn[i + 1]) / b[i];
+    for (let i = 0; i < N; i++) this.nodes[i].T = Tn[i];
+
+    // phase changes (enthalpy clamp): water → vapour, solid → melt
+    for (const nd of this.nodes) {
+      for (const p of this.phase) {
+        if (nd.m[p.from] > 0 && nd.T > p.T) {
+          const Cn = this.heatCap(nd);
+          const excess = (nd.T - p.T) * Cn;
+          const dm = Math.min(nd.m[p.from], excess / p.L);
+          nd.m[p.from] -= dm;
+          if (p.to) nd.m[p.to] = (nd.m[p.to] || 0) + dm;
+          nd.T = p.T + (excess - dm * p.L) / Math.max(this.heatCap(nd), 1e-9);
+        }
+      }
+    }
+
+    // pyrolysis
+    let gas = 0;
+    for (const nd of this.nodes) {
+      for (const rx of this.reactions) {
+        const m = nd.m[rx.from]; if (!(m > 0)) continue;
+        const kr = rx.A * Math.exp(-rx.E / (RGAS * nd.T));
+        if (kr * dt < 1e-14) continue;
+        let dm = m * (1 - Math.exp(-kr * dt));
+        if (rx.dH > 0) { // energy-limited: an endothermic step cannot cool its node below ~Tp − 150 K
+          const room = this.heatCap(nd) * (nd.T - (rx.Tp - 150));
+          dm = Math.max(0, Math.min(dm, room / rx.dH));
+        }
+        nd.m[rx.from] -= dm;
+        for (const prod in rx.products) {
+          const y = rx.products[prod] * dm;
+          if (prod === 'gas') gas += y; else nd.m[prod] = (nd.m[prod] || 0) + y;
+        }
+        const Cn = this.heatCap(nd);
+        nd.T -= dm * (rx.dH || 0) / Math.max(Cn, 1e-9);
+      }
+    }
+    const mdot = gas / dt; // kg/m²/s of fuel gas
+
+    // drainage of foam-collapse liquid to a pool at the bottom
+    const drainKeys = Object.keys(this.comps).filter(k => this.comps[k].drains);
+    if (drainKeys.length) {
+      let last = this.nodes[this.nodes.length - 1];
+      if (!last.pool) { last = { m: Object.fromEntries(Object.keys(this.comps).map(k => [k, 0])), T: last.T, pool: true }; this.nodes.push(last); }
+      for (let i = 0; i < this.nodes.length - 1; i++) {
+        const nd = this.nodes[i];
+        for (const k of drainKeys) {
+          const dm = nd.m[k]; if (!(dm > 0)) continue;
+          const cl = dm * cpOf(this.comps[k], nd.T), cp0 = this.heatCap(last);
+          last.T = (cp0 * last.T + cl * nd.T) / (cp0 + cl);
+          last.m[k] += dm; nd.m[k] = 0; this.pooled += dm;
+        }
+      }
+    }
+
+    // dripping of molten surface material (vertical objects)
+    if (this.opts.drip) {
+      while (this.nodes.length > 1) {
+        const nd = this.nodes[0];
+        let vMol = 0, v = 0;
+        for (const k in nd.m) { const c = this.comps[k]; if (!c || c.inPores) continue; const vi = nd.m[k] / c.rho; v += vi; if (c.molten) vMol += vi; }
+        if (v > 0 && vMol / v > 0.5) { for (const k in nd.m) if (this.comps[k] && !this.comps[k].inPores) this.dripped += nd.m[k]; this.nodes.shift(); }
+        else break;
+      }
+    }
+
+    this.remesh();
+
+    // ignition / extinction (piloted)
+    const ig = mat.ignition;
+    if (!this.flaming) {
+      if (mdot >= ig.mCrit) {
+        this.aboveFor = (this.aboveFor || 0) + dt;
+        if (this.aboveFor >= (ig.tDelay ?? 0.5)) { this.flaming = true; if (this.ignitedAt === null) this.ignitedAt = this.t + dt; this.everIgnited = true; }
+      } else this.aboveFor = 0;
+    } else if (mdot < ig.mCrit * (ig.extFrac ?? 0.5)) { this.flaming = false; this.aboveFor = 0; }
+    const hrr = this.flaming ? mdot * mat.dHc : 0;
+    this.t += dt;
+    this.lastTs = Ts;
+    return { mdot, hrr, Ts };
+  }
+
+  remesh() {
+    // merge vanishing nodes
+    for (let i = 0; i < this.nodes.length; i++) {
+      const nd = this.nodes[i];
+      if (this.nodes.length > 1 && this.thick(nd) < 2e-7 && !(nd.pool && this.thick(nd) > 0)) {
+        const j = (i === 0) ? 1 : i - 1;
+        const nb = this.nodes[j];
+        const C1 = this.heatCap(nd), C2 = this.heatCap(nb);
+        for (const k in nd.m) nb.m[k] = (nb.m[k] || 0) + nd.m[k];
+        if (C1 + C2 > 0) nb.T = (C1 * nd.T + C2 * nb.T) / (C1 + C2);
+        if (nd.pool) nb.pool = true;
+        this.nodes.splice(i, 1); i--;
+      }
+    }
+    // keep the surface node thin so the surface temperature stays resolved
+    const dMax = 1e-4;
+    let guard = 0;
+    while (this.nodes.length && this.thick(this.nodes[0]) > dMax && guard++ < 8) {
+      const nd = this.nodes[0];
+      const half = { m: {}, T: nd.T, pool: nd.pool };
+      for (const k in nd.m) { half.m[k] = nd.m[k] / 2; nd.m[k] /= 2; }
+      this.nodes.unshift(half);
+    }
+    if (this.nodes.length > 400) { // coarsen deep nodes if needed
+      const a = this.nodes[this.nodes.length - 2], b = this.nodes[this.nodes.length - 1];
+      if (!b.pool) { const C1 = this.heatCap(a), C2 = this.heatCap(b); for (const k in b.m) a.m[k] += b.m[k]; a.T = (C1 * a.T + C2 * b.T) / (C1 + C2); this.nodes.pop(); }
+    }
+  }
+
+  // depth (m) from current surface to where virgin solid is still >50% of the solid volume
+  charDepth() {
+    let depth = 0;
+    for (const nd of this.nodes) {
+      const tk = this.thick(nd); let vs = 0;
+      for (const k in nd.m) { const c = this.comps[k]; if (c && c.fuel && !c.drains && !c.inPores) vs += nd.m[k] / c.rho; }
+      if (tk > 0 && vs / tk > 0.5) break; depth += tk;
+    }
+    return depth;
+  }
+  thickness() { let s = 0; for (const nd of this.nodes) s += this.thick(nd); return s; }
+  sum(key) { let s = 0; for (const nd of this.nodes) s += nd.m[key] || 0; return s; }
+}
+
+// Run a cone-calorimeter-style exposure and return a time series + summary.
+function runCone(mat, qExtKW, opts = {}) {
+  const dt = opts.dt ?? 0.05;
+  const tEnd = opts.tEnd ?? 1800;
+  const every = opts.every ?? 0.5;
+  const s = new Slab(mat, opts);
+  const series = { t: [], hrr: [], mdot: [], Ts: [], Tback: [], massFrac: [], charDepth: [], thick: [], water: [], melt: [], dripped: [], flaming: [] };
+  let nextRec = 0, peak = 0, tPeak = null, thr = 0, burnout = null;
+  const water0 = s.sum('water');
+  const qExt = qExtKW * 1000;
+  let lastFlameT = null;
+  while (s.t < tEnd) {
+    const out = s.step(dt, qExt);
+    thr += out.hrr * dt;
+    if (out.hrr > peak) { peak = out.hrr; tPeak = s.t; }
+    if (s.flaming) lastFlameT = s.t;
+    if (s.t + 1e-9 >= nextRec) {
+      series.t.push(+s.t.toFixed(2));
+      series.hrr.push(out.hrr / 1000);
+      series.mdot.push(out.mdot * 1000);
+      series.Ts.push(out.Ts - 273.15);
+      series.Tback.push((s.nodes.length ? s.nodes[s.nodes.length - 1].T : T_AMB) - 273.15);
+      series.massFrac.push(s.totalMass() / s.m0);
+      series.charDepth.push(s.charDepth() * 1000);
+      series.thick.push(s.thickness() * 1000);
+      series.water.push(water0 > 0 ? s.sum('water') / water0 : 0);
+      series.melt.push(mat.meltKey ? s.sum(mat.meltKey) : 0);
+      series.dripped.push(s.dripped);
+      series.flaming.push(s.flaming ? 1 : 0);
+      nextRec += every;
+    }
+    if (s.fuelLeft() < 1e-4 * s.m0 && !s.flaming) { burnout = s.t; break; }
+    if (s.everIgnited && !s.flaming && lastFlameT !== null && s.t - lastFlameT > 120 && s.fuelLeft() < 0.05 * s.m0) { burnout = s.t; break; }
+  }
+  return {
+    material: mat.key, flux: qExtKW,
+    tig: s.ignitedAt, peakHRR: peak / 1000, tPeakAfterIg: (tPeak !== null && s.ignitedAt !== null) ? tPeak - s.ignitedAt : null,
+    THR: thr / 1e6, burnout, dripped: s.dripped, series,
+  };
+}
+
+</script>
+<script>
+const DATA = {"date":"Nov 5, 2026","verifyMaxErr":"0.28%","verifyMaxErrShort":"0.3%","cases":[{"key":"pine","q":25,"split":"train","tig":125.49999999999501,"peak":251.81961884287725,"tPeakAfterIg":3.1499999999999915,"THR":45.706542877173426,"burnout":null},{"key":"pine","q":35,"split":"held-out (other lab)","tig":42.799999999999706,"peak":284.6054937612118,"tPeakAfterIg":2.9499999999998323,"THR":51.12391238015773,"burnout":null},{"key":"pine","q":50,"split":"train","tig":17.15000000000011,"peak":312.2954960327033,"tPeakAfterIg":2.5000000000000355,"THR":56.829689421842495,"burnout":null},{"key":"pine","q":75,"split":"held-out","tig":6.999999999999983,"peak":370.9526651330794,"tPeakAfterIg":1.8500000000000076,"THR":64.57292172365328,"burnout":null},{"key":"foam","q":25,"split":"train","tig":5.549999999999988,"peak":460.0263277706493,"tPeakAfterIg":93.64999999999652,"THR":39.265720493282636,"burnout":136.5999999999968},{"key":"foam","q":35,"split":"held-out (other lab)","tig":2.6499999999999986,"peak":648.8303623692146,"tPeakAfterIg":76.44999999999766,"THR":38.551394073843355,"burnout":99.04999999999652},{"key":"foam","q":50,"split":"train","tig":1.7000000000000008,"peak":938.9675032385251,"tPeakAfterIg":59.04999999999868,"THR":37.041023544951614,"burnout":71.1499999999981},{"key":"foam","q":75,"split":"held-out","tig":1.3500000000000005,"peak":1717.48185853773,"tPeakAfterIg":17.50000000000013,"THR":33.584125254158884,"burnout":48.04999999999941},{"key":"pet","q":25,"split":"train","tig":573.5000000000261,"peak":654.5879853490251,"tPeakAfterIg":208.84999999981005,"THR":182.28393523215544,"burnout":865.3999999997607},{"key":"pet","q":35,"split":"held-out (other lab)","tig":253.5500000000234,"peak":776.4866396996009,"tPeakAfterIg":234.1000000000532,"THR":189.47598962104823,"burnout":535.0000000000612},{"key":"pet","q":50,"split":"train","tig":85.89999999999726,"peak":958.0114049029627,"tPeakAfterIg":236.75000000004184,"THR":194.4577346363022,"burnout":350.55000000004543},{"key":"pet","q":75,"split":"held-out","tig":28.650000000000272,"peak":1250.592204729772,"tPeakAfterIg":202.300000000018,"THR":195.93109426855221,"burnout":246.25000000002174},{"key":"cardboard","q":25,"split":"train","tig":36.90000000000004,"peak":193.79330895847204,"tPeakAfterIg":2.0499999999998835,"THR":32.49169628321697,"burnout":502.9500000000801},{"key":"cardboard","q":35,"split":"held-out (other lab)","tig":13.600000000000058,"peak":231.85000271065977,"tPeakAfterIg":1.6000000000000227,"THR":32.61385835900176,"burnout":403.80000000005754},{"key":"cardboard","q":50,"split":"train","tig":5.749999999999988,"peak":306.55144624089195,"tPeakAfterIg":0.9499999999999966,"THR":32.64217466664738,"burnout":322.150000000039},{"key":"cardboard","q":75,"split":"held-out","tig":2.5999999999999988,"peak":465.49465530308015,"tPeakAfterIg":0.34999999999999876,"THR":32.631587265299814,"burnout":249.1000000000224},{"key":"paper","q":25,"split":"prediction","tig":9.840000000000138,"peak":263.85341987665475,"tPeakAfterIg":1.420000000000222,"THR":0.8214895785976416,"burnout":83.42999999999661},{"key":"paper","q":35,"split":"prediction","tig":3.619999999999945,"peak":514.7456779802328,"tPeakAfterIg":0.8749999999999813,"THR":0.8853553472642267,"burnout":5.984999999999895},{"key":"paper","q":50,"split":"prediction","tig":2.3399999999999723,"peak":908.3006407357274,"tPeakAfterIg":0.42499999999999094,"THR":0.8360300301907366,"burnout":3.479999999999948},{"key":"paper","q":75,"split":"prediction","tig":1.6099999999999877,"peak":1543.78703534662,"tPeakAfterIg":0.10999999999999766,"THR":0.6290737005394073,"burnout":2.0899999999999777}],"ref":{"pine":{"source":"FSRI — Wood Stud (2×6 softwood, 355 kg/m³)","tig":{"25":[132.3,112.5,151.5],"50":[16.6,14.25,18],"75":[6.4,5.75,7.25]},"peak":{"25":[295.4,282.6,303.4],"50":[275.5,249.5,296.4],"75":[337.5,309.4,369.7]},"tPeak":{"25":[9.6,9.5,9.75],"50":[11,10.25,12],"75":[10.4,9,13.25]},"extra":[{"label":"Southern pine @50 (White & Dietenberger)","flux":50,"tig":28,"peak":154},{"label":"Pine siding @25/50/75 (FSRI, 19 mm)","flux":25,"tig":66.9,"peak":259.4},{"label":"Pine siding @50 (FSRI)","flux":50,"tig":10.9,"peak":312.8},{"label":"Timbers @35 (WIT, 75–100 s)","flux":35,"tig":87.5,"tigRange":[75,100]}]},"foam":{"source":"FSRI — Overstuffed chair PU foam (31.7 kg/m³)","tig":{"25":[5.5,5.25,5.75],"50":[1.75,1.75,1.75],"75":[1.33,1,1.5]},"peak":{"25":[458.6,444.9,479.9],"50":[976.3,870.9,1139.2],"75":[1291.6,1185.5,1411.1]},"tPeak":{"25":[43.3,43,43.75],"50":[29.5,29,30.25],"75":[24.3,24.25,24.5]},"extra":[{"label":"NIST TN 2043 FPUF @35 (50 mm, 29.6 kg/m³): PHRR1 255, PHRR2 481, burn 132 s, THR 39.1 MJ/m²","flux":35,"tig":4,"tigRange":[3,5],"peak":481,"peakRange":[432,530],"phrr1":255,"burn":132,"THR":39.1}]},"pet":{"source":"FSRI — PET cast sheet (6.9 mm, 1401 kg/m³)","tig":{"25":[556.1,295,1102.5],"50":[84.8,81.75,88.5],"75":[39.5,36.5,42.25]},"peak":{"25":[716.4,550.7,876],"50":[899.4,880.2,911.8],"75":[781.7,716.8,831.8]},"tPeak":{"25":null,"50":[217.2,207.25,224.25],"75":null},"extra":[]},"cardboard":{"source":"FSRI — Corrugated cardboard (9.5 mm, 320 kg/m³)","tig":{"25":[31,30,32.5],"50":[7.3,6.75,8],"75":[3.7,3,4.25]},"peak":{"25":[198.1,186.2,206.9],"50":[298,281.3,312.8],"75":[364.4,343.6,380.7]},"tPeak":{"25":[19.75,19,20.5],"50":[18.4,18,19],"75":[18,17.5,18.5]},"extra":[]},"paper":null},"extra":{"chf":{"pine":21.6015625,"cardboard":11.93359375,"foam":13.49609375,"pet":20.625,"paper":24.921875},"southernPine50":{"tig":23.800000000000203,"peak":330.0671423172248},"southernPine35":{"tig":58.449999999998816,"peak":302.35154287823315}},"sweepAll":{"pine":[{"q":10,"tig":null,"peak":0},{"q":12,"tig":null,"peak":0},{"q":14,"tig":null,"peak":0},{"q":16,"tig":null,"peak":0},{"q":18,"tig":null,"peak":0},{"q":20,"tig":null,"peak":0},{"q":22,"tig":223.59999999999158,"peak":208.82505419984042},{"q":25,"tig":125.29999999999715,"peak":251.92087912035123},{"q":30,"tig":67.30000000000045,"peak":273.69504031740865},{"q":35,"tig":42.70000000000034,"peak":284.678515359666},{"q":40,"tig":29.700000000000152,"peak":293.6494884095723},{"q":50,"tig":16.99999999999997,"peak":312.0212819492106},{"q":60,"tig":11.199999999999976,"peak":333.8293218935947},{"q":75,"tig":6.8999999999999915,"peak":370.54569628969585},{"q":90,"tig":4.799999999999999,"peak":412.47561496831474}],"foam":[{"q":10,"tig":null,"peak":0},{"q":12,"tig":null,"peak":0},{"q":14,"tig":264.2999999999916,"peak":233.79542244775033},{"q":16,"tig":106.69999999999821,"peak":295.77769078607395},{"q":18,"tig":24.500000000000078,"peak":331.7338884371158},{"q":20,"tig":12.89999999999997,"peak":367.9929659335095},{"q":22,"tig":8.499999999999986,"peak":404.471882198135},{"q":25,"tig":5.4999999999999964,"peak":459.9197650848507},{"q":30,"tig":3.5000000000000018,"peak":553.7028508783766},{"q":35,"tig":2.600000000000001,"peak":689.2516431858112},{"q":40,"tig":2.2000000000000006,"peak":807.8652473593713},{"q":50,"tig":1.7000000000000004,"peak":1025.3228328471876},{"q":60,"tig":1.5000000000000002,"peak":1346.249624170401},{"q":75,"tig":1.2,"peak":1697.1665738814406},{"q":90,"tig":1.2,"peak":1618.4832767269888}],"pet":[{"q":10,"tig":null,"peak":0},{"q":12,"tig":null,"peak":0},{"q":14,"tig":null,"peak":0},{"q":16,"tig":null,"peak":0},{"q":18,"tig":null,"peak":0},{"q":20,"tig":null,"peak":0},{"q":22,"tig":776.0000000001079,"peak":624.851047641857},{"q":25,"tig":573.4000000000618,"peak":654.5978487389468},{"q":30,"tig":384.3000000000189,"peak":715.4950806244887},{"q":35,"tig":253.49999999998988,"peak":776.4952164869288},{"q":40,"tig":171.59999999999454,"peak":837.3708562687082},{"q":50,"tig":85.7999999999994,"peak":958.0195057961683},{"q":60,"tig":50.80000000000045,"peak":1076.701526585313},{"q":75,"tig":28.600000000000136,"peak":1250.6017600442785},{"q":90,"tig":18.499999999999993,"peak":1419.4292716438006}],"cardboard":[{"q":10,"tig":null,"peak":0},{"q":12,"tig":946.4000000001466,"peak":113.56245600397361},{"q":14,"tig":633.3000000000754,"peak":107.3963595011777},{"q":16,"tig":493.9000000000438,"peak":98.87666314066415},{"q":18,"tig":404.5000000000235,"peak":92.34930428489463},{"q":20,"tig":87.39999999999931,"peak":170.78169169647524},{"q":22,"tig":58.40000000000056,"peak":182.58677189572163},{"q":25,"tig":36.70000000000025,"peak":193.87751215853066},{"q":30,"tig":20.800000000000026,"peak":212.10497749024333},{"q":35,"tig":13.499999999999968,"peak":232.10451220626337},{"q":40,"tig":9.599999999999982,"peak":255.28318362500815},{"q":50,"tig":5.699999999999996,"peak":308.1862756147821},{"q":60,"tig":3.800000000000002,"peak":365.29025554338},{"q":75,"tig":2.500000000000001,"peak":469.0293628915732},{"q":90,"tig":1.8000000000000005,"peak":575.8935634984934}],"paper":[{"q":10,"tig":null,"peak":0},{"q":12,"tig":null,"peak":0},{"q":14,"tig":null,"peak":0},{"q":16,"tig":null,"peak":0},{"q":18,"tig":null,"peak":0},{"q":20,"tig":null,"peak":0},{"q":22,"tig":null,"peak":0},{"q":25,"tig":9.840000000000138,"peak":263.85341987665475},{"q":30,"tig":4.694999999999922,"peak":388.20163189284744},{"q":35,"tig":3.619999999999945,"peak":514.7456779802328},{"q":40,"tig":3.019999999999958,"peak":644.4891108045902},{"q":50,"tig":2.3399999999999723,"peak":908.3006407357274},{"q":60,"tig":1.9549999999999803,"peak":1171.3089148524825},{"q":75,"tig":1.6099999999999877,"peak":1543.78703534662},{"q":90,"tig":1.3949999999999922,"peak":1843.5661024630595}]},"moisture":[{"mc":0,"tig":30.400000000000162,"peak":299.4790774967311,"series":{"t":[0.1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,325,330,335,340,345,350,355,360,365,370,375,380,385,390,395,400,405,410,415,420,425,430,435,440,445,450,455,460,465,470,475,480,485,490,495,500,505,510,515,520,525,530,535,540,545,550,555,560,565,570,575,580,585,590,595,600,605,610,615,620,625,630,635,640,645,650,655,660,665,670,675,680,685,690,695,700,705,710,715,720,725,730,735,740,745,750,755,760,765,770,775,780,785,790,795,800,805,810,815,820,825,830,835,840,845,850,855,860,865,870,875,880,885,890,895,900,905,910,915,920,925,930,935,940,945,950,955,960,965,970,975,980,985,990,995,1000,1005,1010,1015,1020,1025,1030,1035,1040,1045,1050,1055,1060,1065,1070,1075,1080,1085,1090,1095,1100,1105,1110,1115,1120,1125,1130,1135,1140,1145,1150,1155,1160,1165,1170,1175,1180,1185,1190,1195,1200],"Ts":[27.921,258.549,315.04,348.478,371.749,389.487,403.967,579.016,629.81,653.603,668.327,678.634,686.395,692.524,697.53,701.724,705.307,708.414,711.144,713.567,715.738,717.697,719.477,721.103,722.597,723.976,725.253,726.441,727.549,728.586,729.559,730.475,731.338,732.154,732.927,733.66,734.357,735.021,735.653,736.258,736.835,737.388,737.918,738.427,738.915,739.385,739.838,740.273,740.694,741.099,741.491,741.87,742.236,742.591,742.934,743.267,743.59,743.903,744.208,744.503,744.791,745.07,745.342,745.607,745.865,746.116,746.362,746.6,746.834,747.061,747.283,747.5,747.712,747.919,748.122,748.32,748.514,748.704,748.89,749.071,749.25,749.424,749.595,749.763,749.928,750.089,750.247,750.402,750.555,750.704,750.851,750.996,751.138,751.277,751.414,751.548,751.68,751.81,751.938,752.064,752.188,752.31,752.43,752.548,752.664,752.778,752.891,753.002,753.111,753.219,753.325,753.43,753.533,753.634,753.735,753.833,753.931,754.027,754.121,754.215,754.307,754.398,754.488,754.577,754.664,754.751,754.836,754.921,755.004,755.086,755.167,755.247,755.326,755.405,755.482,755.559,755.634,755.709,755.783,755.856,755.928,756,756.07,756.14,756.209,756.277,756.345,756.411,756.478,756.543,756.608,756.672,756.735,756.798,756.86,756.922,756.983,757.043,757.103,757.162,757.221,757.279,757.336,757.393,757.449,757.505,757.561,757.615,757.67,757.724,757.777,757.83,757.882,757.934,757.986,758.037,758.088,758.138,758.188,758.237,758.286,758.334,758.382,758.43,758.477,758.524,758.571,758.617,758.663,758.709,758.754,758.799,758.843,758.888,758.931,758.975,759.018,759.061,759.103,759.146,759.187,759.229,759.27,759.311,759.352,759.392,759.432,759.472,759.512,759.551,759.59,759.629,759.668,759.706,759.744,759.782,759.82,759.857,759.894,759.931,759.968,760.004,760.04,760.076,760.112,760.147,760.183,760.218,760.252,760.287,760.322,760.356,760.39,760.424,760.457,760.491,760.524,760.558,760.591,760.623,760.656]}},{"mc":0.09,"tig":42.70000000000034,"peak":284.678515359666,"series":{"t":[0.1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,325,330,335,340,345,350,355,360,365,370,375,380,385,390,395,400,405,410,415,420,425,430,435,440,445,450,455,460,465,470,475,480,485,490,495,500,505,510,515,520,525,530,535,540,545,550,555,560,565,570,575,580,585,590,595,600,605,610,615,620,625,630,635,640,645,650,655,660,665,670,675,680,685,690,695,700,705,710,715,720,725,730,735,740,745,750,755,760,765,770,775,780,785,790,795,800,805,810,815,820,825,830,835,840,845,850,855,860,865,870,875,880,885,890,895,900,905,910,915,920,925,930,935,940,945,950,955,960,965,970,975,980,985,990,995,1000,1005,1010,1015,1020,1025,1030,1035,1040,1045,1050,1055,1060,1065,1070,1075,1080,1085,1090,1095,1100,1105,1110,1115,1120,1125,1130,1135,1140,1145,1150,1155,1160,1165,1170,1175,1180,1185,1190,1195,1200],"Ts":[27.921,215.297,275.399,312.813,339.22,359.298,375.389,388.944,400.776,530.979,611.164,641.604,658.861,670.392,678.844,685.424,690.76,695.198,698.992,702.276,705.165,707.73,710.037,712.112,714.013,715.742,717.336,718.817,720.179,721.452,722.648,723.761,724.805,725.796,726.732,727.61,728.443,729.24,729.999,730.717,731.4,732.057,732.689,733.293,733.868,734.419,734.951,735.467,735.964,736.44,736.896,737.337,737.766,738.183,738.586,738.976,739.351,739.713,740.066,740.41,740.747,741.074,741.391,741.697,741.994,742.283,742.566,742.843,743.115,743.38,743.638,743.888,744.132,744.369,744.601,744.829,745.053,745.273,745.489,745.7,745.905,746.105,746.301,746.492,746.68,746.865,747.047,747.226,747.403,747.576,747.745,747.911,748.072,748.231,748.386,748.539,748.69,748.839,748.986,749.132,749.274,749.415,749.553,749.688,749.82,749.95,750.078,750.203,750.327,750.45,750.571,750.691,750.809,750.926,751.042,751.155,751.267,751.376,751.484,751.59,751.695,751.797,751.899,751.999,752.099,752.197,752.295,752.391,752.486,752.581,752.674,752.766,752.856,752.946,753.034,753.12,753.205,753.289,753.373,753.455,753.536,753.617,753.697,753.776,753.855,753.933,754.01,754.086,754.162,754.237,754.311,754.384,754.455,754.526,754.596,754.665,754.733,754.801,754.868,754.934,755,755.065,755.13,755.194,755.258,755.322,755.385,755.447,755.509,755.57,755.631,755.691,755.75,755.808,755.866,755.923,755.979,756.035,756.09,756.145,756.199,756.253,756.307,756.36,756.413,756.466,756.518,756.57,756.622,756.673,756.724,756.775,756.825,756.874,756.923,756.972,757.02,757.067,757.114,757.161,757.207,757.252,757.297,757.342,757.387,757.431,757.476,757.52,757.563,757.607,757.65,757.693,757.736,757.778,757.821,757.863,757.904,757.946,757.986,758.027,758.067,758.107,758.147,758.186,758.225,758.263,758.301,758.339,758.377,758.414,758.451,758.488,758.525,758.561,758.598,758.634,758.67,758.706,758.742,758.777,758.813]}},{"mc":0.2,"tig":57.10000000000054,"peak":271.30687972950005,"series":{"t":[0.1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,325,330,335,340,345,350,355,360,365,370,375,380,385,390,395,400,405,410,415,420,425,430,435,440,445,450,455,460,465,470,475,480,485,490,495,500,505,510,515,520,525,530,535,540,545,550,555,560,565,570,575,580,585,590,595,600,605,610,615,620,625,630,635,640,645,650,655,660,665,670,675,680,685,690,695,700,705,710,715,720,725,730,735,740,745,750,755,760,765,770,775,780,785,790,795,800,805,810,815,820,825,830,835,840,845,850,855,860,865,870,875,880,885,890,895,900,905,910,915,920,925,930,935,940,945,950,955,960,965,970,975,980,985,990,995,1000,1005,1010,1015,1020,1025,1030,1035,1040,1045,1050,1055,1060,1065,1070,1075,1080,1085,1090,1095,1100,1105,1110,1115,1120,1125,1130,1135,1140,1145,1150,1155,1160,1165,1170,1175,1180,1185,1190,1195,1200],"Ts":[27.921,183.117,240.239,278.931,307.033,329.014,346.851,361.471,374.118,385.281,395.384,404.782,546.29,615.327,642.078,657.605,668.12,675.926,682.013,687.017,691.243,694.845,698.038,700.83,703.351,705.634,707.671,709.592,711.317,712.911,714.431,715.813,717.091,718.33,719.488,720.544,721.558,722.544,723.468,724.318,725.135,725.939,726.707,727.424,728.094,728.75,729.398,730.02,730.606,731.156,731.687,732.214,732.733,733.231,733.703,734.147,734.577,735.004,735.428,735.841,736.238,736.615,736.974,737.321,737.666,738.011,738.35,738.679,738.996,739.299,739.588,739.869,740.148,740.428,740.705,740.977,741.241,741.496,741.741,741.975,742.203,742.429,742.656,742.882,743.106,743.326,743.54,743.747,743.947,744.139,744.326,744.509,744.693,744.876,745.06,745.242,745.421,745.596,745.767,745.932,746.093,746.248,746.399,746.548,746.696,746.845,746.994,747.143,747.29,747.435,747.577,747.716,747.851,747.983,748.11,748.235,748.356,748.477,748.597,748.718,748.839,748.96,749.08,749.199,749.316,749.431,749.544,749.654,749.761,749.866,749.968,750.068,750.167,750.264,750.362,750.46,750.558,750.656,750.754,750.852,750.948,751.043,751.136,751.228,751.318,751.406,751.492,751.576,751.659,751.74,751.819,751.898,751.978,752.057,752.137,752.217,752.296,752.376,752.455,752.533,752.611,752.687,752.763,752.837,752.909,752.981,753.051,753.119,753.186,753.252,753.317,753.382,753.446,753.51,753.575,753.639,753.704,753.769,753.834,753.899,753.963,754.027,754.09,754.152,754.214,754.274,754.334,754.392,754.45,754.507,754.562,754.617,754.67,754.723,754.776,754.828,754.88,754.933,754.985,755.038,755.091,755.144,755.196,755.249,755.302,755.354,755.406,755.457,755.508,755.558,755.608,755.657,755.705,755.753,755.799,755.845,755.891,755.935,755.979,756.023,756.065,756.108,756.151,756.193,756.236,756.279,756.322,756.365,756.408,756.451,756.494,756.537,756.58,756.623,756.665,756.707,756.749,756.79,756.831,756.871,756.911]}},{"mc":0.3,"tig":70.0000000000003,"peak":261.3836669587189,"series":{"t":[0.1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100,105,110,115,120,125,130,135,140,145,150,155,160,165,170,175,180,185,190,195,200,205,210,215,220,225,230,235,240,245,250,255,260,265,270,275,280,285,290,295,300,305,310,315,320,325,330,335,340,345,350,355,360,365,370,375,380,385,390,395,400,405,410,415,420,425,430,435,440,445,450,455,460,465,470,475,480,485,490,495,500,505,510,515,520,525,530,535,540,545,550,555,560,565,570,575,580,585,590,595,600,605,610,615,620,625,630,635,640,645,650,655,660,665,670,675,680,685,690,695,700,705,710,715,720,725,730,735,740,745,750,755,760,765,770,775,780,785,790,795,800,805,810,815,820,825,830,835,840,845,850,855,860,865,870,875,880,885,890,895,900,905,910,915,920,925,930,935,940,945,950,955,960,965,970,975,980,985,990,995,1000,1005,1010,1015,1020,1025,1030,1035,1040,1045,1050,1055,1060,1065,1070,1075,1080,1085,1090,1095,1100,1105,1110,1115,1120,1125,1130,1135,1140,1145,1150,1155,1160,1165,1170,1175,1180,1185,1190,1195,1200],"Ts":[27.921,164.307,216.113,254.492,283.218,306.046,324.502,340.218,353.42,365.059,375.534,385.135,393.99,402.244,410.311,587.872,627.97,647.943,660.446,669.172,675.828,681.256,685.652,689.552,692.807,695.822,698.412,700.801,703.006,704.918,706.792,708.5,710.005,711.501,712.907,714.148,715.335,716.522,717.617,718.593,719.543,720.503,721.407,722.224,722.982,723.755,724.522,725.243,725.902,726.512,727.129,727.756,728.36,728.925,729.444,729.933,730.43,730.938,731.434,731.904,732.342,732.749,733.142,733.545,733.956,734.36,734.747,735.112,735.454,735.775,736.093,736.42,736.753,737.082,737.4,737.703,737.99,738.26,738.517,738.774,739.039,739.309,739.577,739.839,740.092,740.333,740.562,740.78,740.988,741.195,741.407,741.624,741.844,742.06,742.272,742.476,742.672,742.859,743.038,743.209,743.376,743.544,743.717,743.894,744.072,744.248,744.421,744.59,744.752,744.909,745.06,745.204,745.343,745.478,745.613,745.752,745.894,746.038,746.182,746.326,746.467,746.604,746.738,746.867,746.992,747.113,747.229,747.341,747.45,747.559,747.67,747.784,747.901,748.018,748.136,748.252,748.367,748.479,748.589,748.695,748.799,748.899,748.996,749.09,749.181,749.27,749.358,749.447,749.538,749.632,749.727,749.822,749.918,750.013,750.107,750.199,750.289,750.377,750.463,750.547,750.628,750.708,750.785,750.859,750.932,751.004,751.076,751.148,751.222,751.298,751.375,751.452,751.53,751.608,751.685,751.761,751.836,751.91,751.982,752.053,752.122,752.189,752.255,752.319,752.382,752.443,752.503,752.561,752.619,752.677,752.737,752.797,752.858,752.92,752.983,753.046,753.11,753.173,753.235,753.297,753.358,753.418,753.478,753.536,753.593,753.648,753.703,753.757,753.809,753.86,753.91,753.959,754.007,754.054,754.101,754.149,754.196,754.245,754.294,754.345,754.396,754.447,754.498,754.55,754.601,754.652,754.703,754.753,754.802,754.851,754.899,754.947,754.993,755.039,755.083,755.127,755.17,755.213,755.254,755.295,755.335]}}],"bottle":[{"q":25,"drip":false,"tig":null,"peak":0,"THR":0,"dripped":0},{"q":25,"drip":true,"tig":null,"peak":0,"THR":0,"dripped":0.40628999999999993},{"q":50,"drip":false,"tig":12.699999999999774,"peak":737.2556322196608,"THR":8.284266076039792,"dripped":0},{"q":50,"drip":true,"tig":null,"peak":0,"THR":0,"dripped":0.4062900000000001}],"tuned":{"pine":{"key":"pine","label":"Pine block (2×6 stud)","solid":"wood","thickness":0.038,"moisture":0.09,"components":{"wood":{"rho":326,"k":0.088,"kSlope":0.0002,"cp":1236,"cpSlope":3.87,"absorb":0.8,"eps":0.8,"fuel":true},"char":{"rho":71.72,"k":0.07,"kRad":1e-10,"cp":1000,"cpSlope":1,"absorb":0.95,"eps":0.95},"water":{"rho":1000,"k":0.6,"cp":4180,"inPores":true}},"reactions":[{"from":"wood","products":{"gas":0.78,"char":0.22},"E":127849.10202026367,"Tp":636.75,"dH":300000}],"phase":[{"from":"water","to":null,"T":373.15,"L":2257000}],"dHc":12340000,"ignition":{"mCrit":0.0017978779971599581,"qFlame":38690.09390473366,"extFrac":0.5,"tDelay":0.5}},"foam":{"key":"foam","label":"PU foam cube (cushion)","solid":"foam","thickness":0.05,"moisture":0,"components":{"foam":{"rho":31.7,"k":0.0195,"kRad":7e-10,"kMax":0.25,"cp":1400,"cpSlope":2,"absorb":0.9,"eps":0.9,"fuel":true},"polyol":{"rho":1000,"k":0.2,"cp":1900,"absorb":0.92,"eps":0.92,"drains":true,"fuel":true},"char":{"rho":200,"k":0.08,"cp":1000,"absorb":0.95,"eps":0.95}},"reactions":[{"from":"foam","products":{"gas":0.35,"polyol":0.65},"E":150000,"Tp":563,"dH":300000},{"from":"polyol","products":{"gas":0.97,"char":0.03},"E":180000,"Tp":663,"dH":937500}],"phase":[],"dHc":25420000,"ignition":{"mCrit":0.0016962289810180662,"qFlame":13183.59375,"extFrac":0.5,"tDelay":1.1444091796875}},"pet":{"key":"pet","label":"PET (cast sheet / bottle wall)","solid":"pet","thickness":0.0069,"moisture":0,"meltKey":"petMelt","components":{"pet":{"rho":1401,"k":0.181,"kSlope":0.00015,"kMax":0.3,"cp":1105,"cpSlope":3.3,"absorb":0.94,"eps":0.94,"fuel":true},"petMelt":{"rho":1300,"k":0.22,"cp":1900,"absorb":0.94,"eps":0.94,"molten":true,"fuel":true},"char":{"rho":1400,"k":0.15,"cp":1000,"absorb":0.95,"eps":0.95}},"reactions":[{"from":"petMelt","products":{"gas":0.94,"char":0.06},"E":169189.453125,"Tp":713,"dH":843372.3449707031},{"from":"pet","products":{"gas":0.94,"char":0.06},"E":169189.453125,"Tp":713,"dH":843372.3449707031}],"phase":[{"from":"pet","to":"petMelt","T":523,"L":30000}],"dHc":21620000,"ignition":{"mCrit":0.00435791015625,"qFlame":37803.50647866726,"extFrac":0.5,"tDelay":0.5}},"cardboard":{"key":"cardboard","label":"Corrugated cardboard (paper stock)","solid":"cell","thickness":0.0095,"moisture":0.07,"components":{"cell":{"rho":299,"k":0.06,"kSlope":0.0001,"cp":1236,"cpSlope":3.87,"absorb":0.85,"eps":0.85,"fuel":true},"char":{"rho":53.82,"k":0.06,"kRad":1e-10,"cp":1000,"cpSlope":1,"absorb":0.95,"eps":0.95},"water":{"rho":1000,"k":0.6,"cp":4180,"inPores":true}},"reactions":[{"from":"cell","products":{"gas":0.82,"char":0.18},"E":250000,"Tp":613,"dH":300000}],"phase":[{"from":"water","to":null,"T":373.15,"L":2257000}],"dHc":14030000,"ignition":{"mCrit":0.0019162237644195558,"qFlame":11250,"extFrac":0.5,"tDelay":0.5}},"paper":{"key":"paper","label":"Paper sheet (80 g/m², hanging)","solid":"cell","thickness":0.0001,"moisture":0.06,"components":{"cell":{"rho":800,"k":0.07,"kSlope":0.0001,"cp":1236,"cpSlope":3.87,"absorb":0.85,"eps":0.85,"fuel":true},"char":{"rho":144,"k":0.06,"cp":1000,"absorb":0.95,"eps":0.95},"water":{"rho":1000,"k":0.6,"cp":4180,"inPores":true}},"reactions":[{"from":"cell","products":{"gas":0.82,"char":0.18},"E":250000,"Tp":613,"dH":300000}],"phase":[{"from":"water","to":null,"T":373.15,"L":2257000}],"dHc":14030000,"ignition":{"mCrit":0.0019162237644195558,"qFlame":11250,"extFrac":0.5,"tDelay":0.5}}},"defaults":{"pine":{"key":"pine","label":"Pine block (2×6 stud)","solid":"wood","thickness":0.038,"moisture":0.09,"components":{"wood":{"rho":326,"k":0.088,"kSlope":0.0002,"cp":1236,"cpSlope":3.87,"absorb":0.8,"eps":0.8,"fuel":true},"char":{"rho":71.72,"k":0.07,"kRad":1e-10,"cp":1000,"cpSlope":1,"absorb":0.95,"eps":0.95},"water":{"rho":1000,"k":0.6,"cp":4180,"inPores":true}},"reactions":[{"from":"wood","products":{"gas":0.78,"char":0.22},"E":120000,"Tp":633,"dH":300000}],"phase":[{"from":"water","to":null,"T":373.15,"L":2257000}],"dHc":12340000,"ignition":{"mCrit":0.003,"qFlame":20000,"extFrac":0.5,"tDelay":0.5}},"foam":{"key":"foam","label":"PU foam cube (cushion)","solid":"foam","thickness":0.05,"moisture":0,"components":{"foam":{"rho":31.7,"k":0.0195,"kRad":7e-10,"kMax":0.25,"cp":1400,"cpSlope":2,"absorb":0.9,"eps":0.9,"fuel":true},"polyol":{"rho":1000,"k":0.2,"cp":1900,"absorb":0.92,"eps":0.92,"drains":true,"fuel":true},"char":{"rho":200,"k":0.08,"cp":1000,"absorb":0.95,"eps":0.95}},"reactions":[{"from":"foam","products":{"gas":0.35,"polyol":0.65},"E":150000,"Tp":563,"dH":300000},{"from":"polyol","products":{"gas":0.97,"char":0.03},"E":180000,"Tp":663,"dH":800000}],"phase":[],"dHc":25420000,"ignition":{"mCrit":0.0015,"qFlame":25000,"extFrac":0.5,"tDelay":0.5}},"pet":{"key":"pet","label":"PET (cast sheet / bottle wall)","solid":"pet","thickness":0.0069,"moisture":0,"meltKey":"petMelt","components":{"pet":{"rho":1401,"k":0.181,"kSlope":0.00015,"kMax":0.3,"cp":1105,"cpSlope":3.3,"absorb":0.94,"eps":0.94,"fuel":true},"petMelt":{"rho":1300,"k":0.22,"cp":1900,"absorb":0.94,"eps":0.94,"molten":true,"fuel":true},"char":{"rho":1400,"k":0.15,"cp":1000,"absorb":0.95,"eps":0.95}},"reactions":[{"from":"petMelt","products":{"gas":0.94,"char":0.06},"E":220000,"Tp":713,"dH":400000},{"from":"pet","products":{"gas":0.94,"char":0.06},"E":220000,"Tp":713,"dH":400000}],"phase":[{"from":"pet","to":"petMelt","T":523,"L":30000}],"dHc":21620000,"ignition":{"mCrit":0.003,"qFlame":25000,"extFrac":0.5,"tDelay":0.5}},"cardboard":{"key":"cardboard","label":"Corrugated cardboard (paper stock)","solid":"cell","thickness":0.0095,"moisture":0.07,"components":{"cell":{"rho":299,"k":0.06,"kSlope":0.0001,"cp":1236,"cpSlope":3.87,"absorb":0.85,"eps":0.85,"fuel":true},"char":{"rho":53.82,"k":0.06,"kRad":1e-10,"cp":1000,"cpSlope":1,"absorb":0.95,"eps":0.95},"water":{"rho":1000,"k":0.6,"cp":4180,"inPores":true}},"reactions":[{"from":"cell","products":{"gas":0.82,"char":0.18},"E":180000,"Tp":633,"dH":300000}],"phase":[{"from":"water","to":null,"T":373.15,"L":2257000}],"dHc":14030000,"ignition":{"mCrit":0.003,"qFlame":20000,"extFrac":0.5,"tDelay":0.5}},"paper":{"key":"paper","label":"Paper sheet (80 g/m², hanging)","solid":"cell","thickness":0.0001,"moisture":0.06,"components":{"cell":{"rho":800,"k":0.07,"kSlope":0.0001,"cp":1236,"cpSlope":3.87,"absorb":0.85,"eps":0.85,"fuel":true},"char":{"rho":144,"k":0.06,"cp":1000,"absorb":0.95,"eps":0.95},"water":{"rho":1000,"k":0.6,"cp":4180,"inPores":true}},"reactions":[{"from":"cell","products":{"gas":0.82,"char":0.18},"E":180000,"Tp":633,"dH":300000}],"phase":[{"from":"water","to":null,"T":373.15,"L":2257000}],"dHc":14030000,"ignition":{"mCrit":0.003,"qFlame":20000,"extFrac":0.5,"tDelay":0.5}}},"chfRef":{"pine":"measured ≈ 10–12 (Spearpoint & Quintiere)","foam":"FSRI: 5.5 s at 25 kW/m²","pet":"FSRI 25 kW/m² replicates: 295–1102 s, near critical","cardboard":"","paper":"free-hanging, cooled on both faces"},"other":{"pine":[{"lab":"ig","r":0.8500000000000073,"note":"southern pine @50 (W&D), density changed only"},{"lab":"pk","r":2.1432931319300312,"note":"same test"},{"lab":"ig","r":0.6679999999999865,"note":"timbers @35, measured 75–100 s"}],"foam":[{"lab":"ig","r":0.6624999999999996,"note":"NIST TN 2043 @35"},{"lab":"pk1","r":1.0840784313725491,"note":"276 vs 255"},{"lab":"pk2","r":1.3489196722852694,"note":"649 vs 481"},{"lab":"burn","r":0.7272727272727273,"note":"96 vs 132 s"},{"lab":"THR","r":0.985969157898807,"note":"38.6 vs 39.1 MJ/m²"}]},"tune":[{"h":"Low-flux ignition of wood","tag":"highest priority","b":"The model needs 21.6 kW/m² to ignite pine, but wood ignites down to about 10–12 kW/m² given long enough. Inside a dumpster, burning neighbours irradiate each other in roughly that range, so this sets whether a fire spreads or fizzles. The missing physics is char oxidation: the glowing char surface makes its own heat and can carry smoldering over into flaming. The calibrator's request for a 39 kW/m² flame flux on pine, near the top of the range I allowed, points the same way: it's making up for heat the model never generates. Add a char + O₂ reaction, then refit."},{"h":"PET at high heat flux","tag":"medium","b":"At 75 kW/m² it ignites 27% early and the end-of-burn peak runs 60% high. Two likely causes: clear PET absorbs radiation in depth, not only at the surface, which delays ignition at high flux, and that late peak is partly the cone's insulated backing. Bottles in a dumpster drip instead of sitting on board, as the drip test shows, so give in-depth absorption priority over the peak. Flame flux also hit the top of its range here (38 kW/m²)."},{"h":"Cardboard is not a uniform slab","tag":"medium","b":"Treating corrugated board as a uniform slab ignites 21–30% early at 50–75 kW/m², and the activation energy pinned at the 250 kJ/mol bound. Real board is thin liners over air-filled flutes. Model it as liner / air gap / liner layers, which the node stack already supports, and the same stack covers boxes and pizza boxes."},{"h":"Foam melt pool burns too hard","tag":"medium","b":"At 75 kW/m² the peak runs 33% high. Against NIST's 35 kW/m² test the second peak is 35% high and flaming ends 27% early (96 vs 132 s), while total heat (38.6 vs 39.1 MJ/m²) and the first peak (276 vs 255) match. The pool burns too hard and too fast, because all the melt lands in one hot layer. Spreading or soaking the pool, and in 3‑D letting it flow across the dumpster floor, should fix both."},{"h":"Dense wood's first peak","tag":"low","b":"Changing only density and thickness to match White & Dietenberger's southern pine gets ignition about right (23.8 vs 28 s at 50 kW/m²), but the first peak comes out about 2.1× theirs (330 vs 154). That could be char forming too slowly or a lab difference in retainer frame and ignition criterion. Worth one more dataset before trusting peaks for hardwoods."},{"h":"Paper has no reference yet","tag":"data gap","b":"The sheet is a prediction only: 9.8 s to ignite at 25 kW/m², under 3 s at 50 and above. It needs a free-hanging single-sheet test to check against. Paper is also mostly lit by direct flame contact, so the 3‑D layer should hand it the flame's local flux, not a fixed radiant level."}],"solid":["The heat conduction solver is within 0.3% of the analytic solution, and energy closes: each sample releases exactly its fuel load.","Thick-solid ignition holds across fluxes: pine at the held-out 75 kW/m² lands within 9% on ignition and 10% on peak, after fitting only at 25 and 50.","PET's late peak arrives 237 s after ignition, against FSRI's 217 s, purely from heat reaching the insulated back. Nothing was fit to that timing.","The mechanisms come out right: moisture delays ignition (pine at 35 kW/m² goes from 30 s dry to 70 s at 30% water); PU foam collapses into a burning pool that gives two peaks; char insulates wood so its burning rate falls after the first peak; and molten PET drips away before it ignites."]};
+</script>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const MATS = ['pine', 'foam', 'pet', 'cardboard', 'paper'];
+  const SLOT = { pine: '--s1', foam: '--s2', pet: '--s3', cardboard: '--s4', paper: '--s5', bottle: '--s3' };
+  const NAME = { pine: 'Pine block', foam: 'PU foam', pet: 'PET sheet', cardboard: 'Cardboard', paper: 'Paper sheet' };
+  const col = k => css(SLOT[k]);
+  const fmt = (x, d = 1) => (x === null || x === undefined || !isFinite(x)) ? '—' : (+x).toFixed(d);
+  $('#runDate').textContent = DATA.date;
+  $('#verif').textContent = DATA.verifyMaxErr;
+
+  // ---------- grading ----------
+  const grade = r => { if (r == null || !isFinite(r)) return 'none'; const a = Math.abs(Math.log(r)); return a <= Math.log(1.25) ? 'good' : a <= Math.log(1.5) ? 'warn' : 'bad'; };
+  const icon = { good: '✓', warn: '!', bad: '✕', none: '–' };
+  const chip = (lab, r, extra) => { const g = grade(r); return `<span class="chip ${g}" title="${extra || ''}">${icon[g]} <b>${lab}</b> ${r == null ? 'n/a' : fmt(r, 2) + '×'}</span>`; };
+
+  // ---------- tiles ----------
+  const C = DATA.cases;
+  const ratio = (k, q, what) => { const c = C.find(x => x.key === k && x.q === q); const ref = DATA.ref[k]; if (!c || !ref || !ref[what === 'tig' ? 'tig' : 'peak'][q]) return null; const v = what === 'tig' ? c.tig : c.peak; return v == null ? null : v / ref[what === 'tig' ? 'tig' : 'peak'][q][0]; };
+  const allR = (qs) => MATS.flatMap(k => qs.flatMap(q => ['tig', 'pk'].map(w => ratio(k, q, w === 'tig' ? 'tig' : 'peak')))).filter(r => r != null);
+  const within = (arr, f) => arr.filter(r => Math.abs(Math.log(r)) <= Math.log(f)).length;
+  const train = allR([25, 50]), held = allR([75]);
+  const tiles = [
+    { cls: 'good', big: `${within(train, 1.25)} / ${train.length}`, t: 'fit points within 25%', sub: '25 and 50 kW/m², four materials' },
+    { cls: within(held, 1.25) >= held.length / 2 ? 'warn' : 'bad', big: `${within(held, 1.25)} / ${held.length}`, t: 'held-out points within 25%', sub: `${within(held, 1.5)} of ${held.length} within 50% at 75 kW/m²` },
+    { cls: 'bad', big: `${fmt(DATA.extra.chf.pine, 0)} vs ≈10–12`, t: 'pine: lowest igniting flux (kW/m²)', sub: 'Model needs about 2× the measured minimum. This matters most for the dumpster.' },
+    { cls: 'good', big: `±${DATA.verifyMaxErrShort}`, t: 'solver vs analytic solution', sub: 'Heat conduction verified, and energy closes' },
+  ];
+  $('#tiles').innerHTML = tiles.map(x => `<div class="tile ${x.cls}"><div class="big">${x.big}</div><div><strong>${x.t}</strong></div><div class="sub">${x.sub}</div></div>`).join('');
+
+  // ---------- scorecard ----------
+  const other = DATA.other;
+  const rows = MATS.map(k => {
+    const cells = [25, 50, 75].map(q => DATA.ref[k] ? chip('ig', ratio(k, q, 'tig')) + '<br>' + chip('pk', ratio(k, q, 'peak')) : '<span class="chip none">no test data</span>');
+    const o = other[k] ? other[k].map(x => `${chip(x.lab, x.r)} <span style="color:var(--muted);font-size:12px">${x.note}</span>`).join('<br>') : '<span class="chip none">–</span>';
+    const chf = `<span class="num">${fmt(DATA.extra.chf[k], 1)}</span> kW/m² <span style="color:var(--muted);font-size:12px">${DATA.chfRef[k] || ''}</span>`;
+    return `<tr><td class="mat"><span class="sw" style="background:var(${SLOT[k]})"></span>${NAME[k]}</td>${cells.map(c => `<td>${c}</td>`).join('')}<td>${o}</td><td>${chf}</td></tr>`;
+  });
+  $('#score tbody').innerHTML = rows.join('');
+
+  // ---------- tiny SVG chart ----------
+  function chart(host, cfg) {
+    const W = Math.max(300, host.clientWidth || 520), H = cfg.h || 230;
+    const m = { l: 46, r: cfg.labels ? 92 : 14, t: 10, b: 34 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const lx = cfg.x.log, ly = cfg.y.log;
+    const tx = v => lx ? Math.log10(v) : v, ty = v => ly ? Math.log10(v) : v;
+    const X = v => m.l + (tx(v) - tx(cfg.x.min)) / (tx(cfg.x.max) - tx(cfg.x.min)) * iw;
+    const Y = v => m.t + ih - (ty(Math.max(v, ly ? cfg.y.min : -1e9)) - ty(cfg.y.min)) / (ty(cfg.y.max) - ty(cfg.y.min)) * ih;
+    const ink = css('--ink-2'), grid = css('--line'), axis = css('--axis');
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${cfg.aria || ''}">`;
+    const ticks = (a) => a.ticks;
+    for (const v of ticks(cfg.y)) { s += `<line x1="${m.l}" x2="${m.l + iw}" y1="${Y(v)}" y2="${Y(v)}" stroke="${grid}" stroke-width="1"/><text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end" class="num">${v}</text>`; }
+    for (const v of ticks(cfg.x)) { s += `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t + ih}" y2="${m.t + ih + 4}" stroke="${axis}"/><text x="${X(v)}" y="${m.t + ih + 16}" text-anchor="middle" class="num">${v}</text>`; }
+    s += `<line x1="${m.l}" x2="${m.l + iw}" y1="${m.t + ih}" y2="${m.t + ih}" stroke="${axis}"/>`;
+    s += `<text x="${m.l + iw / 2}" y="${H - 4}" text-anchor="middle">${cfg.x.label}</text>`;
+    s += `<clipPath id="cp-${host.id}"><rect x="${m.l}" y="${m.t - 2}" width="${iw}" height="${ih + 4}"/></clipPath><g clip-path="url(#cp-${host.id})">`;
+    for (const b of (cfg.bands || [])) s += `<rect x="${X(b.x0)}" y="${m.t}" width="${Math.max(2, X(b.x1) - X(b.x0))}" height="${ih}" fill="${css('--ref')}" opacity="0.10"/>`;
+    for (const b of (cfg.hbars || [])) { s += `<rect x="${X(b.x0)}" y="${Y(b.y1)}" width="${Math.max(3, X(b.x1) - X(b.x0))}" height="${Math.max(2, Y(b.y0) - Y(b.y1))}" fill="${css('--ref')}" opacity="0.55" rx="1"/>`; }
+    for (const sr of cfg.series) {
+      const pts = sr.pts.filter(p => p[1] != null && isFinite(p[1]) && (!ly || p[1] > 0) && (!lx || p[0] > 0));
+      if (pts.length < 2) continue;
+      s += `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" ${sr.dash ? 'stroke-dasharray="5 4" opacity="0.85"' : ''}/>`;
+    }
+    for (const p of (cfg.points || [])) {
+      if (p.xerr) s += `<line x1="${X(p.x)}" x2="${X(p.x)}" y1="${Y(p.yerr[0])}" y2="${Y(p.yerr[1])}" stroke="${p.color}" stroke-width="1.5"/>`;
+      if (p.yerr && !p.xerr) s += `<line x1="${X(p.x)}" x2="${X(p.x)}" y1="${Y(p.yerr[0])}" y2="${Y(p.yerr[1])}" stroke="${p.color}" stroke-width="1.5"/>`;
+      s += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="4.5" fill="${p.hollow ? css('--panel') : p.color}" stroke="${p.hollow ? p.color : css('--panel')}" stroke-width="2"/>`;
+    }
+    s += `</g>`;
+    if (cfg.labels) { // direct labels at series ends, nudged apart
+      const ends = cfg.series.filter(sr => sr.label !== false).map(sr => { const pts = sr.pts.filter(p => p[1] != null && isFinite(p[1]) && (!ly || p[1] > 0)); const p = pts[pts.length - 1]; return p ? { y: Y(p[1]), x: X(p[0]), sr } : null; }).filter(Boolean).sort((a, b) => a.y - b.y);
+      for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14;
+      for (const e of ends) s += `<rect x="${m.l + iw + 6}" y="${e.y - 5}" width="8" height="8" rx="2" fill="${e.sr.color}"/><text x="${m.l + iw + 18}" y="${e.y + 3}" class="lbl">${e.sr.name}</text>`;
+    }
+    s += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="${axis}" stroke-width="1" style="display:none"/>`;
+    s += `<rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg><div class="tip"></div>`;
+    host.innerHTML = s;
+    const svg = host.querySelector('svg'), tip = host.querySelector('.tip'), xh = host.querySelector('.xh');
+    const inv = px => { const f = (px - m.l) / iw; const v = tx(cfg.x.min) + f * (tx(cfg.x.max) - tx(cfg.x.min)); return lx ? Math.pow(10, v) : v; };
+    const move = ev => {
+      const r = svg.getBoundingClientRect(); const sc = W / r.width; const px = (ev.clientX - r.left) * sc;
+      if (px < m.l || px > m.l + iw) { tip.style.display = 'none'; xh.style.display = 'none'; return; }
+      const xv = inv(px);
+      const lines = [];
+      for (const sr of cfg.series) {
+        let best = null, bd = Infinity;
+        for (const p of sr.pts) { if (p[1] == null || !isFinite(p[1])) continue; const d = Math.abs(tx(p[0]) - tx(xv)); if (d < bd) { bd = d; best = p; } }
+        if (best) lines.push(`<div><span class="sw" style="background:${sr.color}"></span>${sr.name}: <span class="num">${fmt(best[1], cfg.yDec ?? 0)}</span>${cfg.yUnit || ''}</div>`);
+      }
+      for (const p of (cfg.points || [])) if (Math.abs(X(p.x) - px) < 8) lines.push(`<div><span class="sw" style="background:${p.color}"></span>${p.name}: <span class="num">${fmt(p.y, cfg.yDec ?? 0)}</span>${cfg.yUnit || ''}${p.yerr ? ` (${fmt(p.yerr[0], cfg.yDec ?? 0)}–${fmt(p.yerr[1], cfg.yDec ?? 0)})` : ''}</div>`);
+      xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.style.display = '';
+      tip.innerHTML = `<div style="color:var(--muted)">${cfg.x.label.split(' (')[0]} <span class="num">${fmt(xv, cfg.xDec ?? 0)}</span></div>` + lines.join('');
+      tip.style.display = 'block';
+      const hx = (px / sc); tip.style.left = Math.min(hx + 12, r.width - tip.offsetWidth - 4) + 'px'; tip.style.top = '8px';
+    };
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerleave', () => { tip.style.display = 'none'; xh.style.display = 'none'; });
+  }
+  const niceTicks = (min, max, n = 5) => { const span = max - min; const raw = span / n; const mag = Math.pow(10, Math.floor(Math.log10(raw))); const st = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => span / x <= n) || mag * 10; const out = []; for (let v = Math.ceil(min / st) * st; v <= max + 1e-9; v += st) out.push(+v.toFixed(6)); return out; };
+
+  // ---------- validation figures ----------
+  function drawSweeps() {
+    const sw = DATA.sweepAll;
+    const series = MATS.map(k => ({ name: NAME[k], color: col(k), pts: sw[k].filter(p => p.q <= 80).map(p => [p.q, p.tig]) }));
+    const points = [];
+    for (const k of MATS) { const ref = DATA.ref[k]; if (!ref) continue; for (const q of [25, 50, 75]) { const t = ref.tig[q]; if (!t) continue; points.push({ x: q, y: t[0], yerr: [t[1], t[2]], color: col(k), hollow: q === 75, name: `${NAME[k]} measured @${q}` }); } }
+    points.push({ x: 35, y: 4, yerr: [3, 5], color: col('foam'), hollow: true, name: 'PU foam, NIST @35' });
+    points.push({ x: 35, y: 87.5, yerr: [75, 100], color: col('pine'), hollow: true, name: 'Timbers, WIT @35' });
+    chart($('#c-tig'), { aria: 'Time to ignition versus heat flux', h: 300, labels: true, x: { min: 10, max: 80, log: true, label: 'Heat flux (kW/m²)', ticks: [10, 15, 20, 30, 50, 80] }, y: { min: 0.5, max: 3000, log: true, ticks: [1, 3, 10, 30, 100, 300, 1000, 3000] }, series, points, yUnit: ' s', yDec: 1 });
+    const s2 = MATS.filter(k => k !== 'paper').map(k => ({ name: NAME[k], color: col(k), pts: sw[k].filter(p => p.q <= 80 && p.peak > 0).map(p => [p.q, p.peak]) }));
+    s2.push({ name: NAME.paper, color: col('paper'), pts: sw.paper.filter(p => p.q <= 80 && p.peak > 0).map(p => [p.q, p.peak]) });
+    const p2 = [];
+    for (const k of MATS) { const ref = DATA.ref[k]; if (!ref) continue; for (const q of [25, 50, 75]) { const t = ref.peak[q]; if (!t) continue; p2.push({ x: q, y: t[0], yerr: [t[1], t[2]], color: col(k), hollow: q === 75, name: `${NAME[k]} measured @${q}` }); } }
+    p2.push({ x: 35, y: 481, yerr: [432, 530], color: col('foam'), hollow: true, name: 'PU foam, NIST @35' });
+    chart($('#c-pk'), { aria: 'Peak heat release rate versus heat flux', h: 300, labels: true, x: { min: 10, max: 80, label: 'Heat flux (kW/m²)', ticks: [10, 20, 30, 40, 50, 60, 70, 80] }, y: { min: 0, max: 1800, ticks: [0, 300, 600, 900, 1200, 1500, 1800] }, series: s2, points: p2, yUnit: ' kW/m²' });
+    // table
+    let t = '<thead><tr><th>Material</th><th>Flux</th><th>Role</th><th>Ignition, sim (s)</th><th>Ignition, measured (s)</th><th>Peak, sim</th><th>Peak, measured</th></tr></thead><tbody>';
+    for (const c of C) { const ref = DATA.ref[c.key]; const rt = ref?.tig[c.q], rp = ref?.peak[c.q]; t += `<tr><td>${NAME[c.key]}</td><td class="num">${c.q}</td><td>${c.split}</td><td class="num">${fmt(c.tig)}</td><td class="num">${rt ? fmt(rt[0]) + ' (' + fmt(rt[1]) + '–' + fmt(rt[2]) + ')' : '—'}</td><td class="num">${fmt(c.peak, 0)}</td><td class="num">${rp ? fmt(rp[0], 0) + ' (' + fmt(rp[1], 0) + '–' + fmt(rp[2], 0) + ')' : '—'}</td></tr>`; }
+    $('#tbl').innerHTML = t + '</tbody>';
+  }
+
+  function drawMech() {
+    const mo = DATA.moisture;
+    const series = mo.map((x, i) => ({ name: `${Math.round(x.mc * 100)}% water`, color: [css('--s1'), css('--s2'), css('--s3'), css('--s4')][i], pts: x.series.t.map((t, j) => [t, x.series.Ts[j]]) }));
+    chart($('#c-moist'), { aria: 'Surface temperature for pine at four moisture contents', h: 240, labels: true, x: { min: 0, max: 90, label: 'Time (s)', ticks: [0, 15, 30, 45, 60, 75, 90] }, y: { min: 0, max: 600, ticks: [0, 100, 200, 300, 400, 500, 600] }, series, yUnit: ' °C surface' });
+    const host = $('#c-moist'); const note = document.createElement('div'); note.className = 'chart-note';
+    note.innerHTML = 'Ignition: ' + mo.map(x => `<span class="num">${Math.round(x.mc * 100)}% → ${fmt(x.tig)} s</span>`).join(' · ');
+    host.after(note);
+    let t = '<thead><tr><th>Flux</th><th>Orientation</th><th>Ignites at</th><th>Peak HRR</th><th>Dripped off</th></tr></thead><tbody>';
+    for (const b of DATA.bottle) t += `<tr><td class="num">${b.q} kW/m²</td><td>${b.drip ? 'Vertical (drips)' : 'Flat (pools)'}</td><td class="num">${b.tig ? fmt(b.tig) + ' s' : 'no ignition'}</td><td class="num">${b.peak ? fmt(b.peak, 0) + ' kW/m²' : '—'}</td><td class="num">${b.dripped ? Math.round(100 * b.dripped / 0.4203) + '% of the wall' : '—'}</td></tr>`;
+    $('#bottle').innerHTML = t + '</tbody>';
+  }
+
+  // ---------- findings ----------
+  $('#tune').innerHTML = DATA.tune.map(x => `<li><strong>${x.h}<span class="pill">${x.tag}</span></strong>${x.b}</li>`).join('');
+  $('#solid').innerHTML = DATA.solid.map(x => `<li>${x}</li>`).join('');
+
+  // ---------- live bench ----------
+  const OPTS = {
+    pine: { L: [0.005, 0.05], d: 0.038, moist: true },
+    foam: { L: [0.01, 0.1], d: 0.05 },
+    pet: { L: [0.0003, 0.01], d: 0.0069, drip: true },
+    cardboard: { L: [0.002, 0.02], d: 0.0095, moist: true },
+    paper: { L: [0.00005, 0.0005], d: 0.0001, moist: true },
+    bottle: { base: 'pet', L: [0.0002, 0.001], d: 0.0003, drip: true, dripDefault: true, back: 'exposed' },
+  };
+  const LABEL = { pine: 'Pine block (2×6 stud, 38 mm)', foam: 'PU foam cube (cushion, 50 mm)', pet: 'PET cast sheet (6.9 mm)', cardboard: 'Corrugated cardboard (9.5 mm)', paper: 'Paper sheet (80 g/m², hanging)', bottle: 'PET bottle wall (0.3 mm)' };
+  $('#mat').innerHTML = Object.keys(LABEL).map(k => `<option value="${k}">${LABEL[k]}</option>`).join('');
+  let mode = 'both';
+  const setMode = m => { mode = m; $('#m-both').setAttribute('aria-pressed', m === 'both'); $('#m-cal').setAttribute('aria-pressed', m === 'cal'); schedule(); };
+  $('#m-both').onclick = () => setMode('both'); $('#m-cal').onclick = () => setMode('cal');
+  const thickVal = () => { const o = OPTS[$('#mat').value]; const f = +$('#thick').value; return Math.exp(Math.log(o.L[0]) + f * (Math.log(o.L[1]) - Math.log(o.L[0]))); };
+  const setThick = d => { const o = OPTS[$('#mat').value]; $('#thick').value = (Math.log(d) - Math.log(o.L[0])) / (Math.log(o.L[1]) - Math.log(o.L[0])); };
+  function onMat(resetFlux) {
+    const k = $('#mat').value, o = OPTS[k], base = o.base || k;
+    setThick(o.d);
+    const mat = DATA.tuned[base];
+    $('#moist').disabled = !o.moist; $('#moist').value = o.moist ? (mat.moisture ?? 0) : 0;
+    $('#drip').disabled = !o.drip; $('#drip').checked = !!o.dripDefault;
+    labels(); schedule();
+  }
+  function labels() {
+    $('#fluxOut').textContent = $('#flux').value + ' kW/m²';
+    $('#moistOut').textContent = $('#moist').disabled ? 'n/a' : Math.round(+$('#moist').value * 100) + '%';
+    const d = thickVal(); $('#thickOut').textContent = d < 0.001 ? (d * 1000).toFixed(2) + ' mm' : (d * 1000).toFixed(1) + ' mm';
+  }
+  $('#mat').onchange = () => onMat(); ['flux', 'moist', 'thick'].forEach(id => $('#' + id).oninput = () => { labels(); schedule(); }); $('#drip').onchange = schedule;
+  let timer = null; function schedule() { clearTimeout(timer); $('#status').textContent = 'Running…'; timer = setTimeout(runBench, 120); }
+  function runBench() {
+    const k = $('#mat').value, o = OPTS[k], base = o.base || k;
+    const q = +$('#flux').value, L = thickVal();
+    const thin = L < 0.002;
+    const opts = { thickness: L, drip: $('#drip').checked, back: o.back || (base === 'paper' ? 'exposed' : 'insulated'), dt: thin ? (L < 0.0005 ? 0.005 : 0.02) : 0.1, every: thin ? 0.05 : 0.5, tEnd: thin ? 240 : (base === 'pet' ? 2400 : 1500), nodes: thin ? 30 : 60 };
+    if (!$('#moist').disabled) opts.moisture = +$('#moist').value;
+    const t0 = performance.now();
+    const cal = runCone(DATA.tuned[base], q, opts);
+    const def = mode === 'both' ? runCone(DATA.defaults[base], q, opts) : null;
+    const ms = performance.now() - t0;
+    const color = col(k);
+    const s = cal.series;
+    const tMax = (() => { let last = 0; for (let i = 0; i < s.t.length; i++) if (s.hrr[i] > 1) last = s.t[i]; const tig = cal.tig || 0; return Math.max(10, Math.min(s.t[s.t.length - 1], Math.max(last * 1.08, tig * 1.6, 30))); })();
+    const xt = niceTicks(0, tMax, 5);
+    const xa = { min: 0, max: tMax, label: 'Time (s)', ticks: xt };
+    const ref = (k === 'bottle') ? null : DATA.ref[base];
+    const bands = [], hbars = [];
+    if (ref && ref.tig[q] && L === L) {
+      const [m0, lo, hi] = ref.tig[q]; bands.push({ x0: lo, x1: hi });
+      const pk = ref.peak[q]; const tp = ref.tPeak && ref.tPeak[q];
+      const xc = m0 + (tp ? tp[0] : 0); hbars.push({ x0: xc - tMax * 0.01, x1: xc + tMax * 0.01, y0: pk[1], y1: pk[2] });
+    }
+    const hrrMax = Math.max(50, ...s.hrr, ...(def ? def.series.hrr : [0]), ...(hbars.length ? [hbars[0].y1] : [0])) * 1.1;
+    const ser = (key, run, nm, dash, f = v => v) => ({ name: nm, color, dash, pts: run.series.t.map((t, i) => [t, f(run.series[key][i])]) });
+    const sHRR = [ser('hrr', cal, 'Calibrated', false)]; if (def) sHRR.push(ser('hrr', def, 'Physics defaults', true));
+    chart($('#c-hrr'), { aria: 'Heat release rate over time', labels: !!def, x: xa, y: { min: 0, max: hrrMax, ticks: niceTicks(0, hrrMax) }, series: sHRR, bands, hbars, yUnit: ' kW/m²', xDec: 1 });
+    const tmax = Math.max(100, ...s.Ts) * 1.08;
+    chart($('#c-temp'), { aria: 'Surface and back-face temperature', labels: true, x: xa, y: { min: 0, max: tmax, ticks: niceTicks(0, tmax) }, series: [ser('Ts', cal, 'Surface', false), ser('Tback', cal, 'Back face', false)], yUnit: ' °C', xDec: 1 });
+    // make the back-face line dashed but still labelled
+    const backPath = $('#c-temp').querySelectorAll('path')[1]; if (backPath) backPath.setAttribute('stroke-dasharray', '2 3');
+    const sM = [ser('massFrac', cal, 'Calibrated', false, v => v * 100)]; if (def) sM.push(ser('massFrac', def, 'Physics defaults', true, v => v * 100));
+    chart($('#c-mass'), { aria: 'Mass remaining', labels: !!def, x: xa, y: { min: 0, max: 100, ticks: [0, 25, 50, 75, 100] }, series: sM, yUnit: '%', xDec: 1 });
+    const thMax = Math.max(...s.thick, ...s.charDepth, L * 1000) * 1.1;
+    chart($('#c-char'), { aria: 'Thickness and char depth', labels: true, x: xa, y: { min: 0, max: thMax, ticks: niceTicks(0, thMax) }, series: [ser('thick', cal, 'Thickness', false), ser('charDepth', cal, 'Char / melt', false)], yUnit: ' mm', yDec: 2, xDec: 1 });
+    const charPath = $('#c-char').querySelectorAll('path')[1]; if (charPath) charPath.setAttribute('stroke-dasharray', '2 3');
+    const r = [];
+    r.push(`<span>Ignites at <b>${cal.tig ? fmt(cal.tig) + ' s' : 'no ignition'}</b>${ref && ref.tig[q] ? ` (measured ${fmt(ref.tig[q][0])} s)` : ''}</span>`);
+    r.push(`<span>Peak <b>${fmt(cal.peakHRR, 0)} kW/m²</b>${ref && ref.peak[q] ? ` (measured ${fmt(ref.peak[q][0], 0)})` : ''}</span>`);
+    r.push(`<span>Total heat <b>${fmt(cal.THR, 1)} MJ/m²</b></span>`);
+    if (opts.drip) r.push(`<span>Dripped <b>${fmt(cal.dripped * 1000, 0)} g/m²</b></span>`);
+    if (def) r.push(`<span>Defaults: ignites <b>${def.tig ? fmt(def.tig) + ' s' : 'never'}</b>, peak <b>${fmt(def.peakHRR, 0)}</b></span>`);
+    $('#readout').innerHTML = r.join('');
+    $('#status').textContent = `Simulated ${fmt(s.t[s.t.length - 1], 0)} s of exposure in ${fmt(ms, 0)} ms.` + (ref && !ref.tig[q] ? ' No measured test at this flux. Try 25, 50 or 75 kW/m².' : '');
+  }
+  function drawAll() { drawSweeps(); runBench(); }
+  drawSweeps(); drawMech(); onMat();
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { drawSweeps(); $('#c-moist').nextElementSibling?.remove(); drawMech(); runBench(); }, 200); });
+  const mq = window.matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener && mq.addEventListener('change', () => { drawSweeps(); $('#c-moist').nextElementSibling?.remove(); drawMech(); runBench(); });
+  new MutationObserver(() => { drawSweeps(); $('#c-moist').nextElementSibling?.remove(); drawMech(); runBench(); $('#score tbody').innerHTML = rows.join(''); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>
+</body>
+</html>

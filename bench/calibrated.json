@@ -1,0 +1,35 @@
+{
+ "note": "Calibrated knobs (fit on FSRI 25 & 50 kW/m2 only). Apply over materials.mjs defaults.",
+ "knobs": {
+  "pine": {
+   "ignition.mCrit": 0.0017978779971599581,
+   "ignition.qFlame": 38690.09390473366,
+   "reactions.0.E": 127849.10202026367,
+   "reactions.0.Tp": 636.75
+  },
+  "cardboard": {
+   "ignition.mCrit": 0.0019162237644195558,
+   "ignition.qFlame": 11250,
+   "reactions.0.E": 250000,
+   "reactions.0.Tp": 613
+  },
+  "foam": {
+   "ignition.mCrit": 0.0016962289810180662,
+   "ignition.qFlame": 13183.59375,
+   "reactions.1.dH": 937500,
+   "ignition.tDelay": 1.1444091796875
+  },
+  "pet": {
+   "ignition.mCrit": 0.00435791015625,
+   "ignition.qFlame": 37803.50647866726,
+   "reactions.*.dH": 843372.3449707031,
+   "reactions.*.E": 169189.453125
+  },
+  "paper": {
+   "ignition.mCrit": 0.0019162237644195558,
+   "ignition.qFlame": 11250,
+   "reactions.0.E": 250000,
+   "reactions.0.Tp": 613
+  }
+ }
+}

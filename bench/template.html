@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dumpster Fire Test Bench</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: lab-notebook column — verdict first, live bench, validation figures, then the tuning list. */
+:root {
+  color-scheme: light;
+  --bg: #f4f4f1;          /* page plane: galvanised-steel grey */
+  --panel: #fcfcfb;       /* chart surface */
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --line: #e1e0d9;
+  --axis: #c3c2b7;
+  --accent: #2f5d3a;      /* dumpster green */
+  --accent-ink: #ffffff;
+  --good: #0ca30c; --good-ink: #006300;
+  --warn: #fab219; --warn-ink: #7a5200;
+  --bad: #d03b3b; --bad-ink: #a12424;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4;
+  --ref: #0b0b0b;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f100f; --panel: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+    --line: #2c2c2a; --axis: #383835; --accent: #6fae7f; --accent-ink: #0b0b0b;
+    --good-ink: #0ca30c; --warn-ink: #fab219; --bad-ink: #e66767;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --ref: #f0efec;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f100f; --panel: #1a1a19; --ink: #f0efec; --ink-2: #c3c2b7; --muted: #898781;
+  --line: #2c2c2a; --axis: #383835; --accent: #6fae7f; --accent-ink: #0b0b0b;
+  --good-ink: #0ca30c; --warn-ink: #fab219; --bad-ink: #e66767;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --ref: #f0efec;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--font-body); }
+main { max-width: 1120px; margin: 0 auto; padding: 28px 20px 64px; display: grid; gap: 28px; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: 0.01em; text-wrap: balance; margin: 0; line-height: 1.1; }
+h1 { font-size: 44px; }
+h2 { font-size: 28px; }
+h3 { font-size: 19px; font-family: var(--font-body); font-weight: 600; letter-spacing: 0; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--ink-2); font-size: 16px; }
+.mono, .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+header { display: grid; gap: 10px; border-bottom: 3px solid var(--accent); padding-bottom: 18px; }
+.kicker { font-family: var(--font-mono); font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+section { display: grid; gap: 14px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+
+/* verdict summary */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: grid; gap: 4px; border-left: 5px solid var(--muted); }
+.tile.good { border-left-color: var(--good); } .tile.warn { border-left-color: var(--warn); } .tile.bad { border-left-color: var(--bad); }
+.tile .big { font-family: var(--font-display); font-size: 30px; line-height: 1; }
+.tile .sub { color: var(--ink-2); font-size: 13px; }
+
+/* scorecard */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12.5px; white-space: nowrap; }
+td.mat { white-space: nowrap; font-weight: 600; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12.5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; margin: 1px 0; }
+.chip b { font-weight: 500; color: var(--ink-2); font-family: var(--font-body); font-size: 11.5px; }
+.chip.good { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.chip.warn { color: var(--warn-ink); border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+.chip.bad  { color: var(--bad-ink);  border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
+.chip.none { color: var(--muted); }
+.legend-row { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink-2); align-items: center; }
+
+/* bench */
+.controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: end; }
+.ctl { display: grid; gap: 4px; font-size: 13px; color: var(--ink-2); }
+.ctl output { font-family: var(--font-mono); color: var(--ink); }
+select, input[type="range"], button { font: inherit; }
+select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--axis); background: var(--panel); color: var(--ink); min-width: 220px; }
+input[type="range"] { width: 200px; accent-color: var(--accent); }
+.seg { display: inline-flex; border: 1px solid var(--axis); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); color: var(--ink); padding: 6px 11px; cursor: pointer; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.readout { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--ink-2); }
+.readout span b { font-family: var(--font-mono); color: var(--ink); font-weight: 500; }
+.status { font-size: 12.5px; color: var(--muted); min-height: 1.2em; }
+.chart { width: 100%; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.chart-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--axis); border-radius: 6px; padding: 6px 8px; font-size: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.12); white-space: nowrap; display: none; z-index: 5; }
+.tip .num { color: var(--ink); }
+svg text { fill: var(--muted); font-family: var(--font-body); font-size: 11px; }
+svg .lbl { fill: var(--ink-2); font-size: 11.5px; }
+
+/* findings */
+ol.tune { margin: 0; padding-left: 22px; display: grid; gap: 12px; max-width: 80ch; }
+ol.tune li::marker { font-family: var(--font-display); font-size: 18px; color: var(--accent); }
+ol.tune strong { display: block; }
+.pill { display: inline-block; font-size: 11.5px; padding: 0 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); margin-left: 6px; vertical-align: 1px; font-weight: 500; }
+ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 80ch; }
+.sources { font-size: 13px; color: var(--ink-2); }
+.sources a { color: var(--accent); }
+details summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+@media (max-width: 520px) { h1 { font-size: 34px; } select { min-width: 0; width: 100%; } input[type="range"] { width: 100%; } .ctl { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="kicker">Shred Hole companion · solid-phase physics check · <span id="runDate"></span></div>
+  <h1>Dumpster Fire Test Bench</h1>
+  <p class="lede">Before any flames get rendered: a 1‑D pyrolysis and ignition model for four materials, heated like a cone calorimeter sample and scored against published lab data. I calibrated it on the 25 and 50 kW/m² tests only. The 75 kW/m² tests and another lab's data are held out to check it.</p>
+</header>
+
+<section aria-labelledby="h-verdict">
+  <h2 id="h-verdict">Verdict</h2>
+  <div class="tiles" id="tiles"></div>
+  <div class="panel tablewrap">
+    <table id="score">
+      <thead><tr><th>Material</th><th>25 kW/m² · fit</th><th>50 kW/m² · fit</th><th>75 kW/m² · held out</th><th>Other lab · held out</th><th>Lowest flux that ignites</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="legend-row" style="margin-top:10px">
+      <span>Each chip is simulated ÷ measured.</span>
+      <span class="chip good">✓ within 25%</span><span class="chip warn">! within 50%</span><span class="chip bad">✕ further off</span>
+      <span><b>ig</b> = time to sustained ignition, <b>pk</b> = peak heat release rate</span>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="h-bench">
+  <h2 id="h-bench">Live bench</h2>
+  <p>This runs the same model in your browser. Pick a material and a radiant heat flux. Dashed lines are the untuned physics defaults. The black band and bar show the measured ignition time and peak range, where a test exists at that flux.</p>
+  <div class="panel" style="display:grid; gap:14px">
+    <div class="controls">
+      <label class="ctl" for="mat">Material
+        <select id="mat"></select>
+      </label>
+      <label class="ctl" for="flux">Radiant heat flux <output id="fluxOut" for="flux"></output>
+        <input type="range" id="flux" min="10" max="80" step="1" value="50">
+      </label>
+      <label class="ctl" for="moist">Moisture (kg water / kg dry) <output id="moistOut" for="moist"></output>
+        <input type="range" id="moist" min="0" max="0.30" step="0.01" value="0.09">
+      </label>
+      <label class="ctl" for="thick">Thickness <output id="thickOut" for="thick"></output>
+        <input type="range" id="thick" min="0" max="1" step="0.001" value="0.5">
+      </label>
+      <div class="ctl">Model
+        <div class="seg" role="group" aria-label="Model parameters">
+          <button type="button" id="m-both" aria-pressed="true">Calibrated + defaults</button>
+          <button type="button" id="m-cal" aria-pressed="false">Calibrated only</button>
+        </div>
+      </div>
+      <label class="check" for="drip"><input type="checkbox" id="drip"> Molten surface drips off (vertical object)</label>
+    </div>
+    <div class="readout" id="readout"></div>
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="grid2">
+      <div><div class="chart-title">Heat release rate (kW/m²)</div><div class="chart" id="c-hrr"></div></div>
+      <div><div class="chart-title">Temperature (°C): exposed surface and back face</div><div class="chart" id="c-temp"></div></div>
+      <div><div class="chart-title">Mass remaining (% of initial)</div><div class="chart" id="c-mass"></div></div>
+      <div><div class="chart-title">Thickness and char depth (mm)</div><div class="chart" id="c-char"></div></div>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="h-fig">
+  <h2 id="h-fig">Validation across heat flux</h2>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-title">Time to ignition vs heat flux (log–log)</div>
+      <div class="chart" id="c-tig"></div>
+      <p class="chart-note">Lines: calibrated model. Points: measured means, whiskers show the replicate range. Hollow points were not used in fitting. Thin materials (paper) follow a slope near −1 and thick ones (pine, PET) near −2, and each curve turns vertical at its critical heat flux.</p>
+    </div>
+    <div class="panel">
+      <div class="chart-title">Peak heat release rate vs heat flux (kW/m²)</div>
+      <div class="chart" id="c-pk"></div>
+      <p class="chart-note">Same encoding. Foam and PET peaks come from their melt pools, and both run hot at 75 kW/m².</p>
+    </div>
+  </div>
+  <details class="panel"><summary>Show these numbers as a table</summary><div class="tablewrap" style="margin-top:10px"><table id="tbl"></table></div></details>
+</section>
+
+<section aria-labelledby="h-mech">
+  <h2 id="h-mech">Mechanisms you'll want in the dumpster</h2>
+  <div class="grid2">
+    <div class="panel">
+      <div class="chart-title">Wet wood: moisture delays ignition (pine, 35 kW/m²)</div>
+      <div class="chart" id="c-moist"></div>
+      <p class="chart-note">Water has to boil off before the surface can pass 100 °C. That plateau pushes ignition back, and a soaked pallet only steams for a while.</p>
+    </div>
+    <div class="panel">
+      <div class="chart-title">A PET bottle wall (0.3 mm), with and without dripping</div>
+      <div class="tablewrap"><table id="bottle"></table></div>
+      <p class="chart-note" style="margin-top:8px">Held flat in a pan, the thin wall ignites in seconds. Held vertical, the melt runs off before it can make enough fuel vapour, which is why bottles sag and drip in a fire instead of flaring. In the game, those drips should become a pool on the dumpster floor.</p>
+    </div>
+  </div>
+</section>
+
+<section aria-labelledby="h-tune">
+  <h2 id="h-tune">What needs tuning before the 3‑D layers</h2>
+  <ol class="tune" id="tune"></ol>
+  <h3>What already holds up</h3>
+  <ul class="plain" id="solid"></ul>
+</section>
+
+<section aria-labelledby="h-method">
+  <h2 id="h-method">Method</h2>
+  <ul class="plain">
+    <li>Each object face is a stack of thin layers. Conduction is implicit, with a radiating, convecting surface and an insulated back face, as with cone backing board. Water boils off at 100 °C, and PET melts at 250 °C, both by enthalpy clamp.</li>
+    <li>Arrhenius kinetics are pinned to each material's TGA peak temperature, and the gas leaves instantly. Wood leaves char in place, PU foam collapses into a liquid polyol pool, and PET leaves a small dispersed residue.</li>
+    <li>Ignition happens when fuel vapour flux holds above a critical value for a short delay. After that, the flame adds heat to the surface. HRR = vapour flux × effective heat of combustion, using FSRI's values.</li>
+    <li>Verification: on an inert semi-infinite solid with no losses, the surface temperature stays within <span class="num" id="verif"></span> of the analytic √t solution. Energy closes as well: total heat released equals each sample's fuel load.</li>
+    <li>Calibration used a bounded coordinate search on four knobs per material (critical vapour flux, flame heat flux, and two kinetic or heat-of-reaction terms), fit to the 25 and 50 kW/m² data only.</li>
+  </ul>
+  <div class="sources">
+    <strong>Sources</strong>
+    <ul class="plain" style="margin-top:6px">
+      <li><a href="https://materials.fsri.org/materialdetail/wood-stud">FSRI Materials &amp; Products Database: Wood Stud</a>, <a href="https://materials.fsri.org/materialdetail/overstuffed-chair-polyurethane-foam">Overstuffed Chair PU Foam</a>, <a href="https://materials.fsri.org/materialdetail/polyethylene-terephthalate-pet">PET</a>, <a href="https://materials.fsri.org/materialdetail/corrugated-cardboard">Corrugated Cardboard</a>, <a href="https://materials.fsri.org/materialdetail/pine-siding">Pine Siding</a></li>
+      <li><a href="https://nvlpubs.nist.gov/nistpubs/TechnicalNotes/NIST.TN.2043.pdf">NIST TN 2043: cone calorimetry of flexible PU foam at 35 kW/m²</a></li>
+      <li><a href="https://www.researchgate.net/figure/HEAT-RELEASE-RATE-HRR-CURVES-FOR-UNTREATED-AND-TREATED-SOUTHERN-PINE_fig1_266472400">White &amp; Dietenberger: southern pine at 50 kW/m²</a> · <a href="https://witpress.com/elibrary/wit-transactions-on-the-built-environment/110/20707">Timbers at 35 kW/m² (WIT Transactions)</a></li>
+      <li><a href="https://data.zhenzhi.com/details/1/888333853">Spearpoint &amp; Quintiere (2001): piloted ignition of wood, minimum flux ≈ 10 kW/m²</a></li>
+    </ul>
+  </div>
+</section>
+</main>
+
+<script>
+/*__ENGINE__*/
+</script>
+<script>
+const DATA = /*__DATA__*/;
+</script>
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+  const MATS = ['pine', 'foam', 'pet', 'cardboard', 'paper'];
+  const SLOT = { pine: '--s1', foam: '--s2', pet: '--s3', cardboard: '--s4', paper: '--s5', bottle: '--s3' };
+  const NAME = { pine: 'Pine block', foam: 'PU foam', pet: 'PET sheet', cardboard: 'Cardboard', paper: 'Paper sheet' };
+  const col = k => css(SLOT[k]);
+  const fmt = (x, d = 1) => (x === null || x === undefined || !isFinite(x)) ? '—' : (+x).toFixed(d);
+  $('#runDate').textContent = DATA.date;
+  $('#verif').textContent = DATA.verifyMaxErr;
+
+  // ---------- grading ----------
+  const grade = r => { if (r == null || !isFinite(r)) return 'none'; const a = Math.abs(Math.log(r)); return a <= Math.log(1.25) ? 'good' : a <= Math.log(1.5) ? 'warn' : 'bad'; };
+  const icon = { good: '✓', warn: '!', bad: '✕', none: '–' };
+  const chip = (lab, r, extra) => { const g = grade(r); return `<span class="chip ${g}" title="${extra || ''}">${icon[g]} <b>${lab}</b> ${r == null ? 'n/a' : fmt(r, 2) + '×'}</span>`; };
+
+  // ---------- tiles ----------
+  const C = DATA.cases;
+  const ratio = (k, q, what) => { const c = C.find(x => x.key === k && x.q === q); const ref = DATA.ref[k]; if (!c || !ref || !ref[what === 'tig' ? 'tig' : 'peak'][q]) return null; const v = what === 'tig' ? c.tig : c.peak; return v == null ? null : v / ref[what === 'tig' ? 'tig' : 'peak'][q][0]; };
+  const allR = (qs) => MATS.flatMap(k => qs.flatMap(q => ['tig', 'pk'].map(w => ratio(k, q, w === 'tig' ? 'tig' : 'peak')))).filter(r => r != null);
+  const within = (arr, f) => arr.filter(r => Math.abs(Math.log(r)) <= Math.log(f)).length;
+  const train = allR([25, 50]), held = allR([75]);
+  const tiles = [
+    { cls: 'good', big: `${within(train, 1.25)} / ${train.length}`, t: 'fit points within 25%', sub: '25 and 50 kW/m², four materials' },
+    { cls: within(held, 1.25) >= held.length / 2 ? 'warn' : 'bad', big: `${within(held, 1.25)} / ${held.length}`, t: 'held-out points within 25%', sub: `${within(held, 1.5)} of ${held.length} within 50% at 75 kW/m²` },
+    { cls: 'bad', big: `${fmt(DATA.extra.chf.pine, 0)} vs ≈10–12`, t: 'pine: lowest igniting flux (kW/m²)', sub: 'Model needs about 2× the measured minimum. This matters most for the dumpster.' },
+    { cls: 'good', big: `±${DATA.verifyMaxErrShort}`, t: 'solver vs analytic solution', sub: 'Heat conduction verified, and energy closes' },
+  ];
+  $('#tiles').innerHTML = tiles.map(x => `<div class="tile ${x.cls}"><div class="big">${x.big}</div><div><strong>${x.t}</strong></div><div class="sub">${x.sub}</div></div>`).join('');
+
+  // ---------- scorecard ----------
+  const other = DATA.other;
+  const rows = MATS.map(k => {
+    const cells = [25, 50, 75].map(q => DATA.ref[k] ? chip('ig', ratio(k, q, 'tig')) + '<br>' + chip('pk', ratio(k, q, 'peak')) : '<span class="chip none">no test data</span>');
+    const o = other[k] ? other[k].map(x => `${chip(x.lab, x.r)} <span style="color:var(--muted);font-size:12px">${x.note}</span>`).join('<br>') : '<span class="chip none">–</span>';
+    const chf = `<span class="num">${fmt(DATA.extra.chf[k], 1)}</span> kW/m² <span style="color:var(--muted);font-size:12px">${DATA.chfRef[k] || ''}</span>`;
+    return `<tr><td class="mat"><span class="sw" style="background:var(${SLOT[k]})"></span>${NAME[k]}</td>${cells.map(c => `<td>${c}</td>`).join('')}<td>${o}</td><td>${chf}</td></tr>`;
+  });
+  $('#score tbody').innerHTML = rows.join('');
+
+  // ---------- tiny SVG chart ----------
+  function chart(host, cfg) {
+    const W = Math.max(300, host.clientWidth || 520), H = cfg.h || 230;
+    const m = { l: 46, r: cfg.labels ? 92 : 14, t: 10, b: 34 };
+    const iw = W - m.l - m.r, ih = H - m.t - m.b;
+    const lx = cfg.x.log, ly = cfg.y.log;
+    const tx = v => lx ? Math.log10(v) : v, ty = v => ly ? Math.log10(v) : v;
+    const X = v => m.l + (tx(v) - tx(cfg.x.min)) / (tx(cfg.x.max) - tx(cfg.x.min)) * iw;
+    const Y = v => m.t + ih - (ty(Math.max(v, ly ? cfg.y.min : -1e9)) - ty(cfg.y.min)) / (ty(cfg.y.max) - ty(cfg.y.min)) * ih;
+    const ink = css('--ink-2'), grid = css('--line'), axis = css('--axis');
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${cfg.aria || ''}">`;
+    const ticks = (a) => a.ticks;
+    for (const v of ticks(cfg.y)) { s += `<line x1="${m.l}" x2="${m.l + iw}" y1="${Y(v)}" y2="${Y(v)}" stroke="${grid}" stroke-width="1"/><text x="${m.l - 6}" y="${Y(v) + 4}" text-anchor="end" class="num">${v}</text>`; }
+    for (const v of ticks(cfg.x)) { s += `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t + ih}" y2="${m.t + ih + 4}" stroke="${axis}"/><text x="${X(v)}" y="${m.t + ih + 16}" text-anchor="middle" class="num">${v}</text>`; }
+    s += `<line x1="${m.l}" x2="${m.l + iw}" y1="${m.t + ih}" y2="${m.t + ih}" stroke="${axis}"/>`;
+    s += `<text x="${m.l + iw / 2}" y="${H - 4}" text-anchor="middle">${cfg.x.label}</text>`;
+    s += `<clipPath id="cp-${host.id}"><rect x="${m.l}" y="${m.t - 2}" width="${iw}" height="${ih + 4}"/></clipPath><g clip-path="url(#cp-${host.id})">`;
+    for (const b of (cfg.bands || [])) s += `<rect x="${X(b.x0)}" y="${m.t}" width="${Math.max(2, X(b.x1) - X(b.x0))}" height="${ih}" fill="${css('--ref')}" opacity="0.10"/>`;
+    for (const b of (cfg.hbars || [])) { s += `<rect x="${X(b.x0)}" y="${Y(b.y1)}" width="${Math.max(3, X(b.x1) - X(b.x0))}" height="${Math.max(2, Y(b.y0) - Y(b.y1))}" fill="${css('--ref')}" opacity="0.55" rx="1"/>`; }
+    for (const sr of cfg.series) {
+      const pts = sr.pts.filter(p => p[1] != null && isFinite(p[1]) && (!ly || p[1] > 0) && (!lx || p[0] > 0));
+      if (pts.length < 2) continue;
+      s += `<path d="${pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join('')}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" ${sr.dash ? 'stroke-dasharray="5 4" opacity="0.85"' : ''}/>`;
+    }
+    for (const p of (cfg.points || [])) {
+      if (p.xerr) s += `<line x1="${X(p.x)}" x2="${X(p.x)}" y1="${Y(p.yerr[0])}" y2="${Y(p.yerr[1])}" stroke="${p.color}" stroke-width="1.5"/>`;
+      if (p.yerr && !p.xerr) s += `<line x1="${X(p.x)}" x2="${X(p.x)}" y1="${Y(p.yerr[0])}" y2="${Y(p.yerr[1])}" stroke="${p.color}" stroke-width="1.5"/>`;
+      s += `<circle cx="${X(p.x)}" cy="${Y(p.y)}" r="4.5" fill="${p.hollow ? css('--panel') : p.color}" stroke="${p.hollow ? p.color : css('--panel')}" stroke-width="2"/>`;
+    }
+    s += `</g>`;
+    if (cfg.labels) { // direct labels at series ends, nudged apart
+      const ends = cfg.series.filter(sr => sr.label !== false).map(sr => { const pts = sr.pts.filter(p => p[1] != null && isFinite(p[1]) && (!ly || p[1] > 0)); const p = pts[pts.length - 1]; return p ? { y: Y(p[1]), x: X(p[0]), sr } : null; }).filter(Boolean).sort((a, b) => a.y - b.y);
+      for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14;
+      for (const e of ends) s += `<rect x="${m.l + iw + 6}" y="${e.y - 5}" width="8" height="8" rx="2" fill="${e.sr.color}"/><text x="${m.l + iw + 18}" y="${e.y + 3}" class="lbl">${e.sr.name}</text>`;
+    }
+    s += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${m.t + ih}" stroke="${axis}" stroke-width="1" style="display:none"/>`;
+    s += `<rect class="hit" x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="transparent"/></svg><div class="tip"></div>`;
+    host.innerHTML = s;
+    const svg = host.querySelector('svg'), tip = host.querySelector('.tip'), xh = host.querySelector('.xh');
+    const inv = px => { const f = (px - m.l) / iw; const v = tx(cfg.x.min) + f * (tx(cfg.x.max) - tx(cfg.x.min)); return lx ? Math.pow(10, v) : v; };
+    const move = ev => {
+      const r = svg.getBoundingClientRect(); const sc = W / r.width; const px = (ev.clientX - r.left) * sc;
+      if (px < m.l || px > m.l + iw) { tip.style.display = 'none'; xh.style.display = 'none'; return; }
+      const xv = inv(px);
+      const lines = [];
+      for (const sr of cfg.series) {
+        let best = null, bd = Infinity;
+        for (const p of sr.pts) { if (p[1] == null || !isFinite(p[1])) continue; const d = Math.abs(tx(p[0]) - tx(xv)); if (d < bd) { bd = d; best = p; } }
+        if (best) lines.push(`<div><span class="sw" style="background:${sr.color}"></span>${sr.name}: <span class="num">${fmt(best[1], cfg.yDec ?? 0)}</span>${cfg.yUnit || ''}</div>`);
+      }
+      for (const p of (cfg.points || [])) if (Math.abs(X(p.x) - px) < 8) lines.push(`<div><span class="sw" style="background:${p.color}"></span>${p.name}: <span class="num">${fmt(p.y, cfg.yDec ?? 0)}</span>${cfg.yUnit || ''}${p.yerr ? ` (${fmt(p.yerr[0], cfg.yDec ?? 0)}–${fmt(p.yerr[1], cfg.yDec ?? 0)})` : ''}</div>`);
+      xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.style.display = '';
+      tip.innerHTML = `<div style="color:var(--muted)">${cfg.x.label.split(' (')[0]} <span class="num">${fmt(xv, cfg.xDec ?? 0)}</span></div>` + lines.join('');
+      tip.style.display = 'block';
+      const hx = (px / sc); tip.style.left = Math.min(hx + 12, r.width - tip.offsetWidth - 4) + 'px'; tip.style.top = '8px';
+    };
+    svg.addEventListener('pointermove', move); svg.addEventListener('pointerleave', () => { tip.style.display = 'none'; xh.style.display = 'none'; });
+  }
+  const niceTicks = (min, max, n = 5) => { const span = max - min; const raw = span / n; const mag = Math.pow(10, Math.floor(Math.log10(raw))); const st = [1, 2, 2.5, 5, 10].map(x => x * mag).find(x => span / x <= n) || mag * 10; const out = []; for (let v = Math.ceil(min / st) * st; v <= max + 1e-9; v += st) out.push(+v.toFixed(6)); return out; };
+
+  // ---------- validation figures ----------
+  function drawSweeps() {
+    const sw = DATA.sweepAll;
+    const series = MATS.map(k => ({ name: NAME[k], color: col(k), pts: sw[k].filter(p => p.q <= 80).map(p => [p.q, p.tig]) }));
+    const points = [];
+    for (const k of MATS) { const ref = DATA.ref[k]; if (!ref) continue; for (const q of [25, 50, 75]) { const t = ref.tig[q]; if (!t) continue; points.push({ x: q, y: t[0], yerr: [t[1], t[2]], color: col(k), hollow: q === 75, name: `${NAME[k]} measured @${q}` }); } }
+    points.push({ x: 35, y: 4, yerr: [3, 5], color: col('foam'), hollow: true, name: 'PU foam, NIST @35' });
+    points.push({ x: 35, y: 87.5, yerr: [75, 100], color: col('pine'), hollow: true, name: 'Timbers, WIT @35' });
+    chart($('#c-tig'), { aria: 'Time to ignition versus heat flux', h: 300, labels: true, x: { min: 10, max: 80, log: true, label: 'Heat flux (kW/m²)', ticks: [10, 15, 20, 30, 50, 80] }, y: { min: 0.5, max: 3000, log: true, ticks: [1, 3, 10, 30, 100, 300, 1000, 3000] }, series, points, yUnit: ' s', yDec: 1 });
+    const s2 = MATS.filter(k => k !== 'paper').map(k => ({ name: NAME[k], color: col(k), pts: sw[k].filter(p => p.q <= 80 && p.peak > 0).map(p => [p.q, p.peak]) }));
+    s2.push({ name: NAME.paper, color: col('paper'), pts: sw.paper.filter(p => p.q <= 80 && p.peak > 0).map(p => [p.q, p.peak]) });
+    const p2 = [];
+    for (const k of MATS) { const ref = DATA.ref[k]; if (!ref) continue; for (const q of [25, 50, 75]) { const t = ref.peak[q]; if (!t) continue; p2.push({ x: q, y: t[0], yerr: [t[1], t[2]], color: col(k), hollow: q === 75, name: `${NAME[k]} measured @${q}` }); } }
+    p2.push({ x: 35, y: 481, yerr: [432, 530], color: col('foam'), hollow: true, name: 'PU foam, NIST @35' });
+    chart($('#c-pk'), { aria: 'Peak heat release rate versus heat flux', h: 300, labels: true, x: { min: 10, max: 80, label: 'Heat flux (kW/m²)', ticks: [10, 20, 30, 40, 50, 60, 70, 80] }, y: { min: 0, max: 1800, ticks: [0, 300, 600, 900, 1200, 1500, 1800] }, series: s2, points: p2, yUnit: ' kW/m²' });
+    // table
+    let t = '<thead><tr><th>Material</th><th>Flux</th><th>Role</th><th>Ignition, sim (s)</th><th>Ignition, measured (s)</th><th>Peak, sim</th><th>Peak, measured</th></tr></thead><tbody>';
+    for (const c of C) { const ref = DATA.ref[c.key]; const rt = ref?.tig[c.q], rp = ref?.peak[c.q]; t += `<tr><td>${NAME[c.key]}</td><td class="num">${c.q}</td><td>${c.split}</td><td class="num">${fmt(c.tig)}</td><td class="num">${rt ? fmt(rt[0]) + ' (' + fmt(rt[1]) + '–' + fmt(rt[2]) + ')' : '—'}</td><td class="num">${fmt(c.peak, 0)}</td><td class="num">${rp ? fmt(rp[0], 0) + ' (' + fmt(rp[1], 0) + '–' + fmt(rp[2], 0) + ')' : '—'}</td></tr>`; }
+    $('#tbl').innerHTML = t + '</tbody>';
+  }
+
+  function drawMech() {
+    const mo = DATA.moisture;
+    const series = mo.map((x, i) => ({ name: `${Math.round(x.mc * 100)}% water`, color: [css('--s1'), css('--s2'), css('--s3'), css('--s4')][i], pts: x.series.t.map((t, j) => [t, x.series.Ts[j]]) }));
+    chart($('#c-moist'), { aria: 'Surface temperature for pine at four moisture contents', h: 240, labels: true, x: { min: 0, max: 90, label: 'Time (s)', ticks: [0, 15, 30, 45, 60, 75, 90] }, y: { min: 0, max: 600, ticks: [0, 100, 200, 300, 400, 500, 600] }, series, yUnit: ' °C surface' });
+    const host = $('#c-moist'); const note = document.createElement('div'); note.className = 'chart-note';
+    note.innerHTML = 'Ignition: ' + mo.map(x => `<span class="num">${Math.round(x.mc * 100)}% → ${fmt(x.tig)} s</span>`).join(' · ');
+    host.after(note);
+    let t = '<thead><tr><th>Flux</th><th>Orientation</th><th>Ignites at</th><th>Peak HRR</th><th>Dripped off</th></tr></thead><tbody>';
+    for (const b of DATA.bottle) t += `<tr><td class="num">${b.q} kW/m²</td><td>${b.drip ? 'Vertical (drips)' : 'Flat (pools)'}</td><td class="num">${b.tig ? fmt(b.tig) + ' s' : 'no ignition'}</td><td class="num">${b.peak ? fmt(b.peak, 0) + ' kW/m²' : '—'}</td><td class="num">${b.dripped ? Math.round(100 * b.dripped / 0.4203) + '% of the wall' : '—'}</td></tr>`;
+    $('#bottle').innerHTML = t + '</tbody>';
+  }
+
+  // ---------- findings ----------
+  $('#tune').innerHTML = DATA.tune.map(x => `<li><strong>${x.h}<span class="pill">${x.tag}</span></strong>${x.b}</li>`).join('');
+  $('#solid').innerHTML = DATA.solid.map(x => `<li>${x}</li>`).join('');
+
+  // ---------- live bench ----------
+  const OPTS = {
+    pine: { L: [0.005, 0.05], d: 0.038, moist: true },
+    foam: { L: [0.01, 0.1], d: 0.05 },
+    pet: { L: [0.0003, 0.01], d: 0.0069, drip: true },
+    cardboard: { L: [0.002, 0.02], d: 0.0095, moist: true },
+    paper: { L: [0.00005, 0.0005], d: 0.0001, moist: true },
+    bottle: { base: 'pet', L: [0.0002, 0.001], d: 0.0003, drip: true, dripDefault: true, back: 'exposed' },
+  };
+  const LABEL = { pine: 'Pine block (2×6 stud, 38 mm)', foam: 'PU foam cube (cushion, 50 mm)', pet: 'PET cast sheet (6.9 mm)', cardboard: 'Corrugated cardboard (9.5 mm)', paper: 'Paper sheet (80 g/m², hanging)', bottle: 'PET bottle wall (0.3 mm)' };
+  $('#mat').innerHTML = Object.keys(LABEL).map(k => `<option value="${k}">${LABEL[k]}</option>`).join('');
+  let mode = 'both';
+  const setMode = m => { mode = m; $('#m-both').setAttribute('aria-pressed', m === 'both'); $('#m-cal').setAttribute('aria-pressed', m === 'cal'); schedule(); };
+  $('#m-both').onclick = () => setMode('both'); $('#m-cal').onclick = () => setMode('cal');
+  const thickVal = () => { const o = OPTS[$('#mat').value]; const f = +$('#thick').value; return Math.exp(Math.log(o.L[0]) + f * (Math.log(o.L[1]) - Math.log(o.L[0]))); };
+  const setThick = d => { const o = OPTS[$('#mat').value]; $('#thick').value = (Math.log(d) - Math.log(o.L[0])) / (Math.log(o.L[1]) - Math.log(o.L[0])); };
+  function onMat(resetFlux) {
+    const k = $('#mat').value, o = OPTS[k], base = o.base || k;
+    setThick(o.d);
+    const mat = DATA.tuned[base];
+    $('#moist').disabled = !o.moist; $('#moist').value = o.moist ? (mat.moisture ?? 0) : 0;
+    $('#drip').disabled = !o.drip; $('#drip').checked = !!o.dripDefault;
+    labels(); schedule();
+  }
+  function labels() {
+    $('#fluxOut').textContent = $('#flux').value + ' kW/m²';
+    $('#moistOut').textContent = $('#moist').disabled ? 'n/a' : Math.round(+$('#moist').value * 100) + '%';
+    const d = thickVal(); $('#thickOut').textContent = d < 0.001 ? (d * 1000).toFixed(2) + ' mm' : (d * 1000).toFixed(1) + ' mm';
+  }
+  $('#mat').onchange = () => onMat(); ['flux', 'moist', 'thick'].forEach(id => $('#' + id).oninput = () => { labels(); schedule(); }); $('#drip').onchange = schedule;
+  let timer = null; function schedule() { clearTimeout(timer); $('#status').textContent = 'Running…'; timer = setTimeout(runBench, 120); }
+  function runBench() {
+    const k = $('#mat').value, o = OPTS[k], base = o.base || k;
+    const q = +$('#flux').value, L = thickVal();
+    const thin = L < 0.002;
+    const opts = { thickness: L, drip: $('#drip').checked, back: o.back || (base === 'paper' ? 'exposed' : 'insulated'), dt: thin ? (L < 0.0005 ? 0.005 : 0.02) : 0.1, every: thin ? 0.05 : 0.5, tEnd: thin ? 240 : (base === 'pet' ? 2400 : 1500), nodes: thin ? 30 : 60 };
+    if (!$('#moist').disabled) opts.moisture = +$('#moist').value;
+    const t0 = performance.now();
+    const cal = runCone(DATA.tuned[base], q, opts);
+    const def = mode === 'both' ? runCone(DATA.defaults[base], q, opts) : null;
+    const ms = performance.now() - t0;
+    const color = col(k);
+    const s = cal.series;
+    const tMax = (() => { let last = 0; for (let i = 0; i < s.t.length; i++) if (s.hrr[i] > 1) last = s.t[i]; const tig = cal.tig || 0; return Math.max(10, Math.min(s.t[s.t.length - 1], Math.max(last * 1.08, tig * 1.6, 30))); })();
+    const xt = niceTicks(0, tMax, 5);
+    const xa = { min: 0, max: tMax, label: 'Time (s)', ticks: xt };
+    const ref = (k === 'bottle') ? null : DATA.ref[base];
+    const bands = [], hbars = [];
+    if (ref && ref.tig[q] && L === L) {
+      const [m0, lo, hi] = ref.tig[q]; bands.push({ x0: lo, x1: hi });
+      const pk = ref.peak[q]; const tp = ref.tPeak && ref.tPeak[q];
+      const xc = m0 + (tp ? tp[0] : 0); hbars.push({ x0: xc - tMax * 0.01, x1: xc + tMax * 0.01, y0: pk[1], y1: pk[2] });
+    }
+    const hrrMax = Math.max(50, ...s.hrr, ...(def ? def.series.hrr : [0]), ...(hbars.length ? [hbars[0].y1] : [0])) * 1.1;
+    const ser = (key, run, nm, dash, f = v => v) => ({ name: nm, color, dash, pts: run.series.t.map((t, i) => [t, f(run.series[key][i])]) });
+    const sHRR = [ser('hrr', cal, 'Calibrated', false)]; if (def) sHRR.push(ser('hrr', def, 'Physics defaults', true));
+    chart($('#c-hrr'), { aria: 'Heat release rate over time', labels: !!def, x: xa, y: { min: 0, max: hrrMax, ticks: niceTicks(0, hrrMax) }, series: sHRR, bands, hbars, yUnit: ' kW/m²', xDec: 1 });
+    const tmax = Math.max(100, ...s.Ts) * 1.08;
+    chart($('#c-temp'), { aria: 'Surface and back-face temperature', labels: true, x: xa, y: { min: 0, max: tmax, ticks: niceTicks(0, tmax) }, series: [ser('Ts', cal, 'Surface', false), ser('Tback', cal, 'Back face', false)], yUnit: ' °C', xDec: 1 });
+    // make the back-face line dashed but still labelled
+    const backPath = $('#c-temp').querySelectorAll('path')[1]; if (backPath) backPath.setAttribute('stroke-dasharray', '2 3');
+    const sM = [ser('massFrac', cal, 'Calibrated', false, v => v * 100)]; if (def) sM.push(ser('massFrac', def, 'Physics defaults', true, v => v * 100));
+    chart($('#c-mass'), { aria: 'Mass remaining', labels: !!def, x: xa, y: { min: 0, max: 100, ticks: [0, 25, 50, 75, 100] }, series: sM, yUnit: '%', xDec: 1 });
+    const thMax = Math.max(...s.thick, ...s.charDepth, L * 1000) * 1.1;
+    chart($('#c-char'), { aria: 'Thickness and char depth', labels: true, x: xa, y: { min: 0, max: thMax, ticks: niceTicks(0, thMax) }, series: [ser('thick', cal, 'Thickness', false), ser('charDepth', cal, 'Char / melt', false)], yUnit: ' mm', yDec: 2, xDec: 1 });
+    const charPath = $('#c-char').querySelectorAll('path')[1]; if (charPath) charPath.setAttribute('stroke-dasharray', '2 3');
+    const r = [];
+    r.push(`<span>Ignites at <b>${cal.tig ? fmt(cal.tig) + ' s' : 'no ignition'}</b>${ref && ref.tig[q] ? ` (measured ${fmt(ref.tig[q][0])} s)` : ''}</span>`);
+    r.push(`<span>Peak <b>${fmt(cal.peakHRR, 0)} kW/m²</b>${ref && ref.peak[q] ? ` (measured ${fmt(ref.peak[q][0], 0)})` : ''}</span>`);
+    r.push(`<span>Total heat <b>${fmt(cal.THR, 1)} MJ/m²</b></span>`);
+    if (opts.drip) r.push(`<span>Dripped <b>${fmt(cal.dripped * 1000, 0)} g/m²</b></span>`);
+    if (def) r.push(`<span>Defaults: ignites <b>${def.tig ? fmt(def.tig) + ' s' : 'never'}</b>, peak <b>${fmt(def.peakHRR, 0)}</b></span>`);
+    $('#readout').innerHTML = r.join('');
+    $('#status').textContent = `Simulated ${fmt(s.t[s.t.length - 1], 0)} s of exposure in ${fmt(ms, 0)} ms.` + (ref && !ref.tig[q] ? ' No measured test at this flux. Try 25, 50 or 75 kW/m².' : '');
+  }
+  function drawAll() { drawSweeps(); runBench(); }
+  drawSweeps(); drawMech(); onMat();
+  let rz; window.addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(() => { drawSweeps(); $('#c-moist').nextElementSibling?.remove(); drawMech(); runBench(); }, 200); });
+  const mq = window.matchMedia('(prefers-color-scheme: dark)'); mq.addEventListener && mq.addEventListener('change', () => { drawSweeps(); $('#c-moist').nextElementSibling?.remove(); drawMech(); runBench(); });
+  new MutationObserver(() => { drawSweeps(); $('#c-moist').nextElementSibling?.remove(); drawMech(); runBench(); $('#score tbody').innerHTML = rows.join(''); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+})();
+</script>
+</body>
+</html>
